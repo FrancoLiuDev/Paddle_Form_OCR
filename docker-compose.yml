@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  ocr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: offline-ocr
+    image: offline-ocr:latest
+    
+    # 挂载卷
+    volumes:
+      - ./examples:/app/examples
+      - ./output:/app/output
+      - ./results:/app/results
+    
+    # 保持容器运行
+    stdin_open: true
+    tty: true
+    
+    # 重启策略
+    restart: unless-stopped
+    
+    # 工作目录
+    working_dir: /app
+    
+    # 默认命令
+    command: tail -f /dev/null
+
+networks:
+  default:
+    name: offline-ocr-network
