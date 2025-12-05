@@ -11,38 +11,70 @@ from pathlib import Path
 from paddleocr import PaddleOCR
 import cv2
 import numpy as np
+from image_preprocessor import ImagePreprocessor
 
 
 class FormParser:
     """离线表单解析器类（使用 PaddleOCR）"""
     
-    def __init__(self, lang: str = 'ch', use_gpu: bool = False):
+    def __init__(self, lang: str = 'ch', use_gpu: bool = False, enable_preprocessing: bool = False, 
+                 high_sensitivity: bool = False):
         """
         初始化离线表单解析器
         
         Args:
             lang: 语言类型 ('ch'=中文, 'en'=英文, 'ch_en'=中英文混合)
             use_gpu: 是否使用 GPU 加速
+            enable_preprocessing: 是否启用图像预处理（提高识别率）
+            high_sensitivity: 是否启用高敏感度模式（识别更多文字，但可能增加误识别）
         """
         print(f"正在初始化 PaddleOCR（语言: {lang}, GPU: {use_gpu}）...")
+        if high_sensitivity:
+            print("✨ 已启用高敏感度模式（可识别更多文字）")
         print("首次运行会自动下载模型文件（约 20-30MB）...")
+        
+        # 根据敏感度设置参数
+        if high_sensitivity:
+            # 高敏感度参数（降低阈值，识别更多文字）
+            det_db_thresh = 0.2          # 降低检测阈值（默认 0.3）
+            det_db_box_thresh = 0.4      # 降低文本框阈值（默认 0.6）
+            det_db_unclip_ratio = 2.0    # 增加文本框扩展比例（默认 1.5）
+            rec_batch_num = 8            # 增加批次大小
+        else:
+            # 标准参数（平衡准确率和召回率）
+            det_db_thresh = 0.3
+            det_db_box_thresh = 0.5
+            det_db_unclip_ratio = 1.6
+            rec_batch_num = 6
         
         # 初始化 PaddleOCR
         self.ocr = PaddleOCR(
-            use_angle_cls=True,  # 使用角度分类器
-            lang=lang,           # 语言
-            use_gpu=use_gpu,     # 是否使用 GPU
-            show_log=False       # 不显示详细日志
+            use_angle_cls=True,              # 使用角度分类器
+            lang=lang,                       # 语言
+            use_gpu=use_gpu,                 # 是否使用 GPU
+            show_log=False,                  # 不显示详细日志
+            det_db_thresh=det_db_thresh,     # 检测阈值
+            det_db_box_thresh=det_db_box_thresh,  # 文本框阈值
+            det_db_unclip_ratio=det_db_unclip_ratio,  # 文本框扩展比例
+            rec_batch_num=rec_batch_num,     # 识别批次大小
+            max_text_length=512              # 最大文本长度
         )
         
+        self.enable_preprocessing = enable_preprocessing
+        self.high_sensitivity = high_sensitivity
+        self.preprocessor = ImagePreprocessor() if enable_preprocessing else None
+        
         print("✓ PaddleOCR 初始化完成")
+        if enable_preprocessing:
+            print("✓ 图像预处理已启用")
     
-    def parse_form(self, image_path: str) -> Dict[str, Any]:
+    def parse_form(self, image_path: str, save_preprocessed: bool = False) -> Dict[str, Any]:
         """
         解析表单图像（完全离线）
         
         Args:
             image_path: 表单图像路径
+            save_preprocessed: 是否保存预处理后的图像
             
         Returns:
             解析结果字典
@@ -54,15 +86,37 @@ class FormParser:
         try:
             print(f"正在识别: {image_path}")
             
+            # 如果启用预处理，先处理图像
+            processed_image_path = image_path
+            if self.enable_preprocessing:
+                print("  > 正在进行图像预处理...")
+                temp_dir = os.path.join(os.path.dirname(image_path), ".preprocessed")
+                os.makedirs(temp_dir, exist_ok=True)
+                
+                processed_image_path = os.path.join(
+                    temp_dir, 
+                    f"preprocessed_{os.path.basename(image_path)}"
+                )
+                
+                self.preprocessor.enhance_image(image_path, processed_image_path)
+                print("  ✓ 图像预处理完成")
+                
+                if save_preprocessed:
+                    final_path = image_path.replace(".", "_preprocessed.")
+                    import shutil
+                    shutil.copy(processed_image_path, final_path)
+                    print(f"  ✓ 预处理图像已保存到: {final_path}")
+            
             # 执行 OCR 识别
-            result = self.ocr.ocr(image_path, cls=True)
+            result = self.ocr.ocr(processed_image_path, cls=True)
             
             # 解析结果
             if not result or not result[0]:
                 return {
                     "success": False,
                     "error": "未检测到文字",
-                    "image_path": image_path
+                    "image_path": image_path,
+                    "suggestion": "尝试：1) 启用预处理 enable_preprocessing=True  2) 启用高敏感度 high_sensitivity=True"
                 }
             
             # 提取文字和位置信息
@@ -83,6 +137,9 @@ class FormParser:
                 
                 full_text.append(text)
             
+            # 计算平均置信度
+            avg_confidence = sum(b["confidence"] for b in text_blocks) / len(text_blocks)
+            
             # 尝试提取结构化信息
             fields = self._extract_fields(text_blocks)
             
@@ -93,6 +150,9 @@ class FormParser:
                 "full_text": "\n".join(full_text),
                 "fields": fields,
                 "total_blocks": len(text_blocks),
+                "average_confidence": round(avg_confidence, 4),
+                "preprocessing_enabled": self.enable_preprocessing,
+                "high_sensitivity_enabled": self.high_sensitivity,
                 "ocr_engine": "PaddleOCR (Offline)"
             }
             

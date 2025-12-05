@@ -66,6 +66,24 @@ def main():
     )
     
     parser.add_argument(
+        "--preprocess",
+        action="store_true",
+        help="启用图像预处理（提高识别率，适用于低质量图像）"
+    )
+    
+    parser.add_argument(
+        "--high-sensitivity",
+        action="store_true",
+        help="启用高敏感度模式（识别更多文字，可能增加误识别）"
+    )
+    
+    parser.add_argument(
+        "--save-preprocessed",
+        action="store_true",
+        help="保存预处理后的图像"
+    )
+    
+    parser.add_argument(
         "--visualize", "-v",
         help="保存可视化结果图像的路径"
     )
@@ -91,7 +109,9 @@ def main():
         
         ocr_parser = FormParser(
             lang=args.lang,
-            use_gpu=args.use_gpu
+            use_gpu=args.use_gpu,
+            enable_preprocessing=args.preprocess,
+            high_sensitivity=args.high_sensitivity
         )
         
         # 处理图像
@@ -102,7 +122,7 @@ def main():
             if args.verbose:
                 print(f"\n正在解析图像: {image_path}")
             
-            result = ocr_parser.parse_form(image_path)
+            result = ocr_parser.parse_form(image_path, save_preprocessed=args.save_preprocessed)
             
             # 可视化
             if args.visualize and result.get("success"):

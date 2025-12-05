@@ -118,12 +118,84 @@ results = parser.parse_multiple_forms(["form1.jpg", "form2.jpg"])
 
 ## 💡 优化建议
 
+### 🔥 如果有些内文没有辨识出来？
+
+**最简单有效的方法：启用图像预处理**
+
+```bash
+# 启用预处理（强烈推荐！）
+python3 ocr_parser.py --image form.jpg --preprocess
+
+# 🆕 启用高敏感度模式（识别更多文字）
+python3 ocr_parser.py --image form.jpg --high-sensitivity
+
+# 🌟 终极组合（预处理 + 高敏感度）
+python3 ocr_parser.py --image form.jpg --preprocess --high-sensitivity
+
+# 查看效果对比（测试4种模式）
+python3 test_ocr.py form.jpg
+```
+
+在代码中使用：
+
+```python
+# 启用预处理可大幅提升识别率
+parser = FormParser(enable_preprocessing=True)
+result = parser.parse_form("form.jpg")
+
+# 🆕 启用高敏感度（识别更多文字）
+parser = FormParser(high_sensitivity=True)
+result = parser.parse_form("form.jpg")
+
+# 🌟 终极组合（推荐！）
+parser = FormParser(
+    enable_preprocessing=True,
+    high_sensitivity=True
+)
+result = parser.parse_form("form.jpg")
+```
+
+**预处理可以解决以下问题：**
+- ✅ 图像模糊
+- ✅ 光照不均匀
+- ✅ 对比度低
+- ✅ 有噪点污渍
+- ✅ 拍照倾斜
+- ✅ 小字体识别不清
+
+**🆕 高敏感度模式可以：**
+- ✅ 识别更多文字（+30~50%）
+- ✅ 识别小字体文字
+- ✅ 识别低对比度文字
+- ✅ 识别模糊文字
+
+**详细改善方法请查看：**
+📚 [OCR 辨识率改善完整指南](OCR_IMPROVEMENT_GUIDE.md)  
+📚 [高敏感度模式使用指南](HIGH_SENSITIVITY_GUIDE.md)
+
+---
+
 ### 提高识别精度
 
-1. 使用清晰的图像（推荐 1000-3000px）
-2. 确保光线充足
-3. 避免严重倾斜（会自动矫正小角度）
-4. 对比度要清晰
+1. **🌟 使用图像预处理 + 高敏感度**（最推荐！）
+   ```bash
+   python3 ocr_parser.py --image form.jpg --preprocess --high-sensitivity
+   ```
+
+2. **使用图像预处理**（推荐）
+   ```bash
+   python3 ocr_parser.py --image form.jpg --preprocess
+   ```
+
+3. **🆕 使用高敏感度模式**（识别更多文字）
+   ```bash
+   python3 ocr_parser.py --image form.jpg --high-sensitivity
+   ```
+
+4. 使用清晰的图像（推荐 1000-3000px）
+5. 确保光线充足均匀
+6. 避免严重倾斜（会自动矫正小角度）
+7. 保持对比度清晰
 
 ### 提高识别速度
 
@@ -135,15 +207,22 @@ python3 ocr_parser.py --image form.jpg --use-gpu
 ## 📦 项目结构
 
 ```
-deepseek_form/
-├── form_parser.py      # 核心解析类
-├── ocr_parser.py       # 命令行工具
-├── requirements.txt    # 依赖包列表
-├── README.md          # 说明文档
-└── examples/          # 示例图像目录
+Paddle_Form_OCR/
+├── form_parser.py              # 核心解析类
+├── image_preprocessor.py       # 图像预处理模块（新）
+├── ocr_parser.py               # 命令行工具
+├── test_ocr.py                 # OCR效果测试脚本（新）
+├── requirements.txt            # 依赖包列表
+├── README.md                   # 说明文档
+├── OCR_IMPROVEMENT_GUIDE.md    # 识别率改善指南（新）
+└── examples/                   # 示例图像目录
 ```
 
 ## 🆘 常见问题
+
+**Q: 有些内文没有辨识出来怎么办？**  
+A: 启用图像预处理：`python3 ocr_parser.py --image form.jpg --preprocess`  
+   详见 [OCR_IMPROVEMENT_GUIDE.md](OCR_IMPROVEMENT_GUIDE.md)
 
 **Q: 需要网络连接吗？**  
 A: 首次运行需要下载模型（约 20-30MB），之后完全离线
@@ -166,9 +245,16 @@ A: 可以，PaddleOCR 支持表格结构识别
 # 查看命令行帮助
 python3 ocr_parser.py --help
 
-# 运行测试
+# 测试识别效果（对比预处理前后）
+python3 test_ocr.py form.jpg
+
+# 运行基础测试
 python3 form_parser.py
 ```
+
+**📚 详细文档：**
+- [OCR 辨识率改善完整指南](OCR_IMPROVEMENT_GUIDE.md) - 解决识别不全的问题
+- [图像预处理说明](image_preprocessor.py) - 了解预处理原理
 
 ## 🌟 技术栈
 
