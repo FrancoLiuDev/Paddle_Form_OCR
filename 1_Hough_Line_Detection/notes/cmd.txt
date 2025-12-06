@@ -1,0 +1,9 @@
+python3 preprocess_hough.py --input ../fuji.png --output result.jpg --verbose
+
+# 繪出檢測到的線條（紅色標記）
+python3 preprocess_hough.py --input ../fuji.png --output result_with_lines.jpg --show-lines
+
+# 繪出線條 + 詳細信息
+python3 preprocess_hough.py --input ../fuji.png --output result_with_lines.jpg --show-lines --verbose
+
+fuji.png
