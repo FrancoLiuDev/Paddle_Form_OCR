@@ -228,333 +228,172 @@ def detect_blank_separators(image: np.ndarray, angle: float, output_path: str = 
     
     blank_regions = []
     
-    # 如果角度接近水平（±10度），則沿垂直方向掃描（逐行）
-    if abs(angle) <= 10 or abs(angle - 180) <= 10:
-        print(f"  掃描方向: 垂直掃描（逐行檢查水平空白線）")
-        
-        # 先建立每一行的白色比例
-        row_blank_map = []
-        for y in range(h):
-            row = gray[y, :]
-            white_count = np.sum(row >= white_threshold)
-            white_ratio = white_count / w
-            row_blank_map.append(white_ratio)
-        
-        # 找出連續的空白行區域（白色比例 > 0.9）
-        in_blank_region = False
-        region_start = 0
-        
-        for y in range(h):
-            is_blank = row_blank_map[y] > 0.9
-            
-            if is_blank and not in_blank_region:
-                # 開始一個新的空白區域
-                region_start = y
-                in_blank_region = True
-            elif not is_blank and in_blank_region:
-                # 結束當前空白區域
-                region_height = y - region_start
-                if region_height >= 3:  # 至少3行高
-                    # 檢查這個區域內是否有足夠長的水平空白線
-                    region_middle = region_start + region_height // 2
-                    row = gray[region_middle, :]
-                    white_pixels = row >= white_threshold
-                    
-                    # 找連續的白色區段
-                    start = None
-                    for x in range(w):
-                        if white_pixels[x]:
-                            if start is None:
-                                start = x
-                        else:
-                            if start is not None:
-                                length = x - start
-                                if length >= min_blank_length:
-                                    blank_regions.append({
-                                        'type': 'horizontal',
-                                        'y': region_middle,
-                                        'y_start': region_start,
-                                        'y_end': y,
-                                        'x_start': start,
-                                        'x_end': x,
-                                        'length': length
-                                    })
-                                start = None
-                    
-                    # 檢查最後一段
-                    if start is not None:
-                        length = w - start
-                        if length >= min_blank_length:
-                            blank_regions.append({
-                                'type': 'horizontal',
-                                'y': region_middle,
-                                'y_start': region_start,
-                                'y_end': y,
-                                'x_start': start,
-                                'x_end': w,
-                                'length': length
-                            })
-                
-                in_blank_region = False
+    # 統一使用 Bresenham 算法處理所有角度
+    print(f"  掃描方向: 沿 {angle:.1f}° 角度直接掃描")
     
-    # 如果角度接近垂直（90度±10度），則沿水平方向掃描（逐列）
-    elif abs(angle - 90) <= 10 or abs(angle + 90) <= 10:
-        print(f"  掃描方向: 水平掃描（逐列檢查垂直空白線）")
+    # 計算掃描線的方向向量
+    angle_rad = np.radians(angle)
+    dx = np.cos(angle_rad)
+    dy = np.sin(angle_rad)
+    
+    # 垂直於掃描線的方向（用於在垂直方向上移動掃描線）
+    perp_dx = -dy
+    perp_dy = dx
+    
+    # 計算需要掃描的範圍
+    # 沿著垂直於線條的方向掃描
+    diag = int(np.sqrt(w*w + h*h))  # 對角線長度
+    
+    # 從圖像中心開始，向兩側掃描
+    center_x = w / 2
+    center_y = h / 2
+    
+    scanned_lines = []
+    row_white_ratios = []
+    
+    # 沿垂直方向掃描
+    for offset in range(-diag, diag, scan_step):
+        # 掃描線的中心點
+        scan_center_x = center_x + offset * perp_dx
+        scan_center_y = center_y + offset * perp_dy
         
-        # 先建立每一列的白色比例
-        col_blank_map = []
-        for x in range(w):
-            col = gray[:, x]
-            white_count = np.sum(col >= white_threshold)
-            white_ratio = white_count / h
-            col_blank_map.append(white_ratio)
+        # 計算掃描線的起點和終點
+        line_start_x = int(scan_center_x - diag * dx)
+        line_start_y = int(scan_center_y - diag * dy)
+        line_end_x = int(scan_center_x + diag * dx)
+        line_end_y = int(scan_center_y + diag * dy)
         
-        # 找出連續的空白列區域（白色比例 > 0.9）
-        in_blank_region = False
-        region_start = 0
+        # 使用 Bresenham 算法獲取掃描線上的像素
+        points = []
+        x0, y0 = line_start_x, line_start_y
+        x1, y1 = line_end_x, line_end_y
         
-        for x in range(w):
-            is_blank = col_blank_map[x] > 0.9
+        # Bresenham's line algorithm
+        dx_line = abs(x1 - x0)
+        dy_line = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx_line - dy_line
+        
+        x, y = x0, y0
+        while True:
+            if 0 <= x < w and 0 <= y < h:
+                points.append((x, y))
             
-            if is_blank and not in_blank_region:
-                # 開始一個新的空白區域
-                region_start = x
-                in_blank_region = True
-            elif not is_blank and in_blank_region:
-                # 結束當前空白區域
-                region_width = x - region_start
-                if region_width >= 3:  # 至少3列寬
-                    # 檢查這個區域內是否有足夠長的垂直空白線
-                    region_middle = region_start + region_width // 2
-                    col = gray[:, region_middle]
-                    white_pixels = col >= white_threshold
-                    
-                    # 找連續的白色區段
-                    start = None
-                    for y in range(h):
-                        if white_pixels[y]:
-                            if start is None:
-                                start = y
-                        else:
-                            if start is not None:
-                                length = y - start
-                                if length >= min_blank_length:
-                                    blank_regions.append({
-                                        'type': 'vertical',
-                                        'x': region_middle,
-                                        'x_start': region_start,
-                                        'x_end': x,
-                                        'y_start': start,
-                                        'y_end': y,
-                                        'length': length
-                                    })
-                                start = None
-                    
-                    # 檢查最後一段
-                    if start is not None:
-                        length = h - start
-                        if length >= min_blank_length:
-                            blank_regions.append({
-                                'type': 'vertical',
-                                'x': region_middle,
-                                'x_start': region_start,
-                                'x_end': x,
-                                'y_start': start,
-                                'y_end': h,
-                                'length': length
-                            })
+            if x == x1 and y == y1:
+                break
                 
-                in_blank_region = False
-    else:
-        # 對於其他角度，直接在原圖上沿角度方向掃描
-        print(f"  掃描方向: 沿 {angle:.1f}° 角度直接掃描")
+            e2 = 2 * err
+            if e2 > -dy_line:
+                err -= dy_line
+                x += sx
+            if e2 < dx_line:
+                err += dx_line
+                y += sy
         
-        # 計算掃描線的方向向量
-        angle_rad = np.radians(angle)
-        dx = np.cos(angle_rad)
-        dy = np.sin(angle_rad)
-        
-        # 垂直於掃描線的方向（用於在垂直方向上移動掃描線）
-        perp_dx = -dy
-        perp_dy = dx
-        
-        # 計算需要掃描的範圍
-        # 沿著垂直於線條的方向掃描
-        diag = int(np.sqrt(w*w + h*h))  # 對角線長度
-        
-        # 從圖像中心開始，向兩側掃描
-        center_x = w / 2
-        center_y = h / 2
-        
-        scanned_lines = []
-        row_white_ratios = []
-        
-        # 沿垂直方向掃描
-        for offset in range(-diag, diag, scan_step):
-            # 掃描線的中心點
-            scan_center_x = center_x + offset * perp_dx
-            scan_center_y = center_y + offset * perp_dy
-            
-            # 計算掃描線的起點和終點
-            line_start_x = int(scan_center_x - diag * dx)
-            line_start_y = int(scan_center_y - diag * dy)
-            line_end_x = int(scan_center_x + diag * dx)
-            line_end_y = int(scan_center_y + diag * dy)
-            
-            # 使用 Bresenham 算法獲取掃描線上的像素
-            points = []
-            x0, y0 = line_start_x, line_start_y
-            x1, y1 = line_end_x, line_end_y
-            
-            # Bresenham's line algorithm
-            dx_line = abs(x1 - x0)
-            dy_line = abs(y1 - y0)
-            sx = 1 if x0 < x1 else -1
-            sy = 1 if y0 < y1 else -1
-            err = dx_line - dy_line
-            
-            x, y = x0, y0
-            while True:
-                if 0 <= x < w and 0 <= y < h:
-                    points.append((x, y))
-                
-                if x == x1 and y == y1:
-                    break
-                    
-                e2 = 2 * err
-                if e2 > -dy_line:
-                    err -= dy_line
-                    x += sx
-                if e2 < dx_line:
-                    err += dx_line
-                    y += sy
-            
-            if len(points) > 0:
-                # 記錄掃描線用於繪製
-                if len(points) >= 2:
-                    start_pt = points[0]
-                    end_pt = points[-1]
-                    scanned_lines.append({
-                        'x1': start_pt[0], 'y1': start_pt[1],
-                        'x2': end_pt[0], 'y2': end_pt[1],
-                        'offset': offset,
-                        'points': points  # 保存所有像素點
-                    })
-        
-        print(f"  完成 {len(scanned_lines)} 條掃描線")
-        
-        # 在每條掃描線上找連續的空白區段
-        print(f"  在每條掃描線上尋找連續空白區段...")
-        print(f"  白色閾值: {white_threshold}")
-        
-        # 計算整體灰度統計
-        overall_mean = np.mean(gray)
-        overall_std = np.std(gray)
-        print(f"  圖片灰度: 平均={overall_mean:.1f}, 標準差={overall_std:.1f}")
-        
-        # 如果圖片整體很白且對比度低，使用相對檢測
-        use_relative = (overall_mean > 240 and overall_std < 30)
-        if use_relative:
-            print(f"  使用相對空白檢測模式（尋找比掃描線平均值更白的區域）")
-        
-        filtered_by_dark_pixels = 0  # 統計被過濾掉的區段數
-        
-        for scan_line in scanned_lines:
-            points = scan_line['points']
-            if len(points) == 0:
-                continue
-            
-            # 獲取這條掃描線上的所有像素值
-            pixel_values = [gray[y, x] for x, y in points]
-            
-            # 檢查整條線是否都沒有黑點（所有像素都 >= 220）
-            min_pixel = min(pixel_values)
-            
-            if min_pixel < 220:
-                # 這條線上有黑點（文字），跳過
-                filtered_by_dark_pixels += 1
-                continue
-            
-            # 這條線完全乾淨，記錄為空白區域
+        if len(points) > 0:
+            # 記錄掃描線用於繪製
             if len(points) >= 2:
                 start_pt = points[0]
                 end_pt = points[-1]
-                segment_length = int(np.sqrt((end_pt[0]-start_pt[0])**2 + 
-                                             (end_pt[1]-start_pt[1])**2))
-                
-                blank_regions.append({
-                    'type': 'angled',
-                    'angle': angle,
-                    'x1': start_pt[0],
-                    'y1': start_pt[1],
-                    'x2': end_pt[0],
-                    'y2': end_pt[1],
-                    'length': segment_length
+                scanned_lines.append({
+                    'x1': start_pt[0], 'y1': start_pt[1],
+                    'x2': end_pt[0], 'y2': end_pt[1],
+                    'offset': offset,
+                    'points': points  # 保存所有像素點
                 })
+    
+    print(f"  完成 {len(scanned_lines)} 條掃描線")
+    
+    # 在每條掃描線上找連續的空白區段
+    print(f"  在每條掃描線上尋找連續空白區段...")
+    print(f"  白色閾值: {white_threshold}")
+    
+    # 計算整體灰度統計
+    overall_mean = np.mean(gray)
+    overall_std = np.std(gray)
+    print(f"  圖片灰度: 平均={overall_mean:.1f}, 標準差={overall_std:.1f}")
+    
+    # 如果圖片整體很白且對比度低，使用相對檢測
+    use_relative = (overall_mean > 240 and overall_std < 30)
+    if use_relative:
+        print(f"  使用相對空白檢測模式（尋找比掃描線平均值更白的區域）")
+    
+    filtered_by_dark_pixels = 0  # 統計被過濾掉的區段數
+    
+    for scan_line in scanned_lines:
+        points = scan_line['points']
+        if len(points) == 0:
+            continue
         
-        print(f"  找到 {len(blank_regions)} 個空白區段")
-        print(f"  過濾掉 {filtered_by_dark_pixels} 個有黑點的掃描線")
+        # 獲取這條掃描線上的所有像素值
+        pixel_values = [gray[y, x] for x, y in points]
         
-        # 調試：統計空白區段的 Y 坐標分布
-        if len(blank_regions) > 0:
-            y_coords = []
-            for blank in blank_regions:
-                y_coords.append(blank['y1'])
-                y_coords.append(blank['y2'])
-            y_coords = np.array(y_coords)
-            print(f"  空白區段 Y 坐標範圍: {y_coords.min()} - {y_coords.max()}")
-            print(f"  Y > 300 的區段數: {np.sum(y_coords > 300)}/{len(y_coords)}")
+        # 檢查整條線是否都沒有黑點（所有像素都 >= 220）
+        min_pixel = min(pixel_values)
         
-        # 先建立只有綠線的版本
-        result_clean = image.copy()
+        if min_pixel < 220:
+            # 這條線上有黑點（文字），跳過
+            filtered_by_dark_pixels += 1
+            continue
         
-        # 繪製掃描過的線（紅色）- 在原圖上
-        print(f"  繪製 {len(scanned_lines)} 條掃描線（紅色標記）")
-        for scan_line in scanned_lines:
-            cv2.line(result, 
-                    (scan_line['x1'], scan_line['y1']), 
-                    (scan_line['x2'], scan_line['y2']), 
-                    (0, 0, 255), 2)  # 紅色，粗線（改為2像素）
+        # 這條線完全乾淨，記錄為空白區域
+        if len(points) >= 2:
+            start_pt = points[0]
+            end_pt = points[-1]
+            segment_length = int(np.sqrt((end_pt[0]-start_pt[0])**2 + 
+                                         (end_pt[1]-start_pt[1])**2))
+            
+            blank_regions.append({
+                'type': 'angled',
+                'angle': angle,
+                'x1': start_pt[0],
+                'y1': start_pt[1],
+                'x2': end_pt[0],
+                'y2': end_pt[1],
+                'length': segment_length
+            })
+    
+    print(f"  找到 {len(blank_regions)} 個空白區段")
+    print(f"  過濾掉 {filtered_by_dark_pixels} 個有黑點的掃描線")
+    
+    # 調試：統計空白區段的 Y 坐標分布
+    if len(blank_regions) > 0:
+        y_coords = []
+        for blank in blank_regions:
+            y_coords.append(blank['y1'])
+            y_coords.append(blank['y2'])
+        y_coords = np.array(y_coords)
+        print(f"  空白區段 Y 坐標範圍: {y_coords.min()} - {y_coords.max()}")
+        print(f"  Y > 300 的區段數: {np.sum(y_coords > 300)}/{len(y_coords)}")
+    
+    # 先建立只有綠線的版本
+    result_clean = image.copy()
+    
+    # 繪製掃描過的線（紅色）- 在原圖上
+    print(f"  繪製 {len(scanned_lines)} 條掃描線（紅色標記）")
+    for scan_line in scanned_lines:
+        cv2.line(result, 
+                (scan_line['x1'], scan_line['y1']), 
+                (scan_line['x2'], scan_line['y2']), 
+                (0, 0, 255), 2)  # 紅色，粗線（改為2像素）
     
     # 繪製檢測到的空白線
     print(f"\n  檢測到 {len(blank_regions)} 個空白分隔區域")
     
-    # 繪製所有空白區域
+    # 繪製所有空白區域（都是 angled 類型）
     for idx, blank in enumerate(blank_regions, 1):
-        if blank['type'] == 'horizontal':
-            # 水平空白線用綠色標記（在兩個版本上都畫）
-            cv2.line(result, 
-                    (blank['x_start'], blank['y']), 
-                    (blank['x_end'], blank['y']), 
-                    (0, 255, 0), 2)
-            cv2.line(result_clean, 
-                    (blank['x_start'], blank['y']), 
-                    (blank['x_end'], blank['y']), 
-                    (0, 255, 0), 2)
-            print(f"  {idx}. 水平空白區 at y={blank['y']} (範圍:{blank['y_start']}-{blank['y_end']}), x=[{blank['x_start']}-{blank['x_end']}], 長度={blank['length']}px")
-        elif blank['type'] == 'vertical':
-            # 垂直空白線用綠色標記
-            cv2.line(result, 
-                    (blank['x'], blank['y_start']), 
-                    (blank['x'], blank['y_end']), 
-                    (0, 255, 0), 2)
-            cv2.line(result_clean, 
-                    (blank['x'], blank['y_start']), 
-                    (blank['x'], blank['y_end']), 
-                    (0, 255, 0), 2)
-            print(f"  {idx}. 垂直空白區 at x={blank['x']} (範圍:{blank['x_start']}-{blank['x_end']}), y=[{blank['y_start']}-{blank['y_end']}], 長度={blank['length']}px")
-        elif blank['type'] == 'angled':
-            # 傾斜空白線用綠色標記
-            cv2.line(result, 
-                    (blank['x1'], blank['y1']), 
-                    (blank['x2'], blank['y2']), 
-                    (0, 255, 0), 2)
-            cv2.line(result_clean, 
-                    (blank['x1'], blank['y1']), 
-                    (blank['x2'], blank['y2']), 
-                    (0, 255, 0), 2)
-            if idx <= 20:  # 只打印前20條
-                print(f"  {idx}. 傾斜空白區 ({blank['angle']:.1f}°) from ({blank['x1']},{blank['y1']}) to ({blank['x2']},{blank['y2']}), 長度={blank['length']}px")
+        # 空白線用綠色標記（在兩個版本上都畫）
+        cv2.line(result, 
+                (blank['x1'], blank['y1']), 
+                (blank['x2'], blank['y2']), 
+                (0, 255, 0), 2)
+        cv2.line(result_clean, 
+                (blank['x1'], blank['y1']), 
+                (blank['x2'], blank['y2']), 
+                (0, 255, 0), 2)
+        if idx <= 20:  # 只打印前20條
+            print(f"  {idx}. 空白區 ({blank['angle']:.1f}°) from ({blank['x1']},{blank['y1']}) to ({blank['x2']},{blank['y2']}), 長度={blank['length']}px")
     
     if len(blank_regions) > 20:
         print(f"  ... (省略剩餘 {len(blank_regions)-20} 個的打印輸出)")
