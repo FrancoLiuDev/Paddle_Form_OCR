@@ -457,73 +457,43 @@ def detect_blank_separators(image: np.ndarray, angle: float, output_path: str = 
         if use_relative:
             print(f"  使用相對空白檢測模式（尋找比掃描線平均值更白的區域）")
         
+        filtered_by_dark_pixels = 0  # 統計被過濾掉的區段數
+        
         for scan_line in scanned_lines:
             points = scan_line['points']
-            if len(points) < min_blank_length:
+            if len(points) == 0:
                 continue
             
             # 獲取這條掃描線上的所有像素值
             pixel_values = [gray[y, x] for x, y in points]
-            line_mean = np.mean(pixel_values)
             
-            if use_relative:
-                # 相對模式：找比這條線平均值更白的區域
-                # 使用動態閾值：線平均值 + (255 - 線平均值) * 0.5
-                dynamic_threshold = line_mean + (255 - line_mean) * 0.3
-                is_white = [val >= dynamic_threshold for val in pixel_values]
-            else:
-                # 絕對模式：使用固定閾值
-                is_white = [val >= white_threshold for val in pixel_values]
+            # 檢查整條線是否都沒有黑點（所有像素都 >= 220）
+            min_pixel = min(pixel_values)
             
-            # 計算這條線上的平均白度
-            pixel_values = [gray[y, x] for x, y in points]
-            line_avg = np.mean(pixel_values)
+            if min_pixel < 220:
+                # 這條線上有黑點（文字），跳過
+                filtered_by_dark_pixels += 1
+                continue
             
-            # 找連續的白色區段
-            blank_start = None
-            for i, white in enumerate(is_white):
-                if white and blank_start is None:
-                    blank_start = i
-                elif not white and blank_start is not None:
-                    # 結束一個空白區段
-                    blank_length = i - blank_start
-                    if blank_length >= min_blank_length:
-                        start_pt = points[blank_start]
-                        end_pt = points[i-1]
-                        segment_length = int(np.sqrt((end_pt[0]-start_pt[0])**2 + 
-                                                     (end_pt[1]-start_pt[1])**2))
-                        
-                        blank_regions.append({
-                            'type': 'angled',
-                            'angle': angle,
-                            'x1': start_pt[0],
-                            'y1': start_pt[1],
-                            'x2': end_pt[0],
-                            'y2': end_pt[1],
-                            'length': segment_length
-                        })
-                    blank_start = None
-            
-            # 檢查最後一段
-            if blank_start is not None:
-                blank_length = len(is_white) - blank_start
-                if blank_length >= min_blank_length:
-                    start_pt = points[blank_start]
-                    end_pt = points[-1]
-                    segment_length = int(np.sqrt((end_pt[0]-start_pt[0])**2 + 
-                                                 (end_pt[1]-start_pt[1])**2))
-                    
-                    blank_regions.append({
-                        'type': 'angled',
-                        'angle': angle,
-                        'x1': start_pt[0],
-                        'y1': start_pt[1],
-                        'x2': end_pt[0],
-                        'y2': end_pt[1],
-                        'length': segment_length
-                    })
+            # 這條線完全乾淨，記錄為空白區域
+            if len(points) >= 2:
+                start_pt = points[0]
+                end_pt = points[-1]
+                segment_length = int(np.sqrt((end_pt[0]-start_pt[0])**2 + 
+                                             (end_pt[1]-start_pt[1])**2))
+                
+                blank_regions.append({
+                    'type': 'angled',
+                    'angle': angle,
+                    'x1': start_pt[0],
+                    'y1': start_pt[1],
+                    'x2': end_pt[0],
+                    'y2': end_pt[1],
+                    'length': segment_length
+                })
         
         print(f"  找到 {len(blank_regions)} 個空白區段")
+        print(f"  過濾掉 {filtered_by_dark_pixels} 個有黑點的掃描線")
         
         # 調試：統計空白區段的 Y 坐標分布
         if len(blank_regions) > 0:
