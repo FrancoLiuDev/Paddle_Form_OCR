@@ -430,11 +430,6 @@ def detect_blank_separators(image: np.ndarray, angle: float, output_path: str = 
                     y += sy
             
             if len(points) > 0:
-                # 計算這條線上的白色像素比例
-                white_count = sum(1 for x, y in points if gray[y, x] >= white_threshold)
-                white_ratio = white_count / len(points)
-                row_white_ratios.append(white_ratio)
-                
                 # 記錄掃描線用於繪製
                 if len(points) >= 2:
                     start_pt = points[0]
@@ -443,59 +438,102 @@ def detect_blank_separators(image: np.ndarray, angle: float, output_path: str = 
                         'x1': start_pt[0], 'y1': start_pt[1],
                         'x2': end_pt[0], 'y2': end_pt[1],
                         'offset': offset,
-                        'white_ratio': white_ratio
+                        'points': points  # 保存所有像素點
                     })
         
         print(f"  完成 {len(scanned_lines)} 條掃描線")
         
-        # 如果整體白色比例很高，使用相對檢測
-        overall_white_ratio = np.mean(row_white_ratios) if row_white_ratios else 0
-        print(f"  整體白色比例: {overall_white_ratio*100:.1f}%")
+        # 在每條掃描線上找連續的空白區段
+        print(f"  在每條掃描線上尋找連續空白區段...")
+        print(f"  白色閾值: {white_threshold}")
         
-        if overall_white_ratio > 0.80:
-            print(f"  使用相對空白檢測模式（尋找比平均更白的區域）")
-            threshold_ratio = min(0.98, overall_white_ratio + 0.05)
-        else:
-            threshold_ratio = 0.85
+        # 計算整體灰度統計
+        overall_mean = np.mean(gray)
+        overall_std = np.std(gray)
+        print(f"  圖片灰度: 平均={overall_mean:.1f}, 標準差={overall_std:.1f}")
         
-        print(f"  白色比例閾值: {threshold_ratio*100:.1f}%")
+        # 如果圖片整體很白且對比度低，使用相對檢測
+        use_relative = (overall_mean > 240 and overall_std < 30)
+        if use_relative:
+            print(f"  使用相對空白檢測模式（尋找比掃描線平均值更白的區域）")
         
-        # 找出連續的空白掃描線區域
-        in_blank_region = False
-        region_start_idx = 0
-        blank_region_count = 0
-        
-        for idx, scan_line in enumerate(scanned_lines):
-            is_blank = scan_line['white_ratio'] > threshold_ratio
+        for scan_line in scanned_lines:
+            points = scan_line['points']
+            if len(points) < min_blank_length:
+                continue
             
-            if is_blank and not in_blank_region:
-                region_start_idx = idx
-                in_blank_region = True
-            elif not is_blank and in_blank_region:
-                # 結束一個空白區域
-                if idx - region_start_idx >= 3:  # 至少3條掃描線
-                    blank_region_count += 1
-                    # 使用區域中間的掃描線作為代表
-                    middle_idx = (region_start_idx + idx) // 2
-                    if middle_idx < len(scanned_lines):
-                        rep_line = scanned_lines[middle_idx]
+            # 獲取這條掃描線上的所有像素值
+            pixel_values = [gray[y, x] for x, y in points]
+            line_mean = np.mean(pixel_values)
+            
+            if use_relative:
+                # 相對模式：找比這條線平均值更白的區域
+                # 使用動態閾值：線平均值 + (255 - 線平均值) * 0.5
+                dynamic_threshold = line_mean + (255 - line_mean) * 0.3
+                is_white = [val >= dynamic_threshold for val in pixel_values]
+            else:
+                # 絕對模式：使用固定閾值
+                is_white = [val >= white_threshold for val in pixel_values]
+            
+            # 計算這條線上的平均白度
+            pixel_values = [gray[y, x] for x, y in points]
+            line_avg = np.mean(pixel_values)
+            
+            # 找連續的白色區段
+            blank_start = None
+            for i, white in enumerate(is_white):
+                if white and blank_start is None:
+                    blank_start = i
+                elif not white and blank_start is not None:
+                    # 結束一個空白區段
+                    blank_length = i - blank_start
+                    if blank_length >= min_blank_length:
+                        start_pt = points[blank_start]
+                        end_pt = points[i-1]
+                        segment_length = int(np.sqrt((end_pt[0]-start_pt[0])**2 + 
+                                                     (end_pt[1]-start_pt[1])**2))
                         
-                        # 在這條掃描線上找連續的白色區段
-                        # 簡化：直接使用整條線
                         blank_regions.append({
                             'type': 'angled',
                             'angle': angle,
-                            'x1': rep_line['x1'],
-                            'y1': rep_line['y1'],
-                            'x2': rep_line['x2'],
-                            'y2': rep_line['y2'],
-                            'length': int(np.sqrt((rep_line['x2']-rep_line['x1'])**2 + 
-                                                 (rep_line['y2']-rep_line['y1'])**2))
+                            'x1': start_pt[0],
+                            'y1': start_pt[1],
+                            'x2': end_pt[0],
+                            'y2': end_pt[1],
+                            'length': segment_length
                         })
-                
-                in_blank_region = False
+                    blank_start = None
+            
+            # 檢查最後一段
+            if blank_start is not None:
+                blank_length = len(is_white) - blank_start
+                if blank_length >= min_blank_length:
+                    start_pt = points[blank_start]
+                    end_pt = points[-1]
+                    segment_length = int(np.sqrt((end_pt[0]-start_pt[0])**2 + 
+                                                 (end_pt[1]-start_pt[1])**2))
+                    
+                    blank_regions.append({
+                        'type': 'angled',
+                        'angle': angle,
+                        'x1': start_pt[0],
+                        'y1': start_pt[1],
+                        'x2': end_pt[0],
+                        'y2': end_pt[1],
+                        'length': segment_length
+                    })
         
-        print(f"  找到 {blank_region_count} 個候選空白行區域")
+        print(f"  找到 {len(blank_regions)} 個空白區段")
+        
+        # 調試：統計空白區段的 Y 坐標分布
+        if len(blank_regions) > 0:
+            y_coords = []
+            for blank in blank_regions:
+                y_coords.append(blank['y1'])
+                y_coords.append(blank['y2'])
+            y_coords = np.array(y_coords)
+            print(f"  空白區段 Y 坐標範圍: {y_coords.min()} - {y_coords.max()}")
+            print(f"  Y > 300 的區段數: {np.sum(y_coords > 300)}/{len(y_coords)}")
         
         # 先建立只有綠線的版本
         result_clean = image.copy()
@@ -511,7 +549,8 @@ def detect_blank_separators(image: np.ndarray, angle: float, output_path: str = 
     # 繪製檢測到的空白線
     print(f"\n  檢測到 {len(blank_regions)} 個空白分隔區域")
     
-    for idx, blank in enumerate(blank_regions[:20], 1):  # 只顯示前20條
+    # 繪製所有空白區域
+    for idx, blank in enumerate(blank_regions, 1):
         if blank['type'] == 'horizontal':
             # 水平空白線用綠色標記（在兩個版本上都畫）
             cv2.line(result, 
@@ -544,10 +583,11 @@ def detect_blank_separators(image: np.ndarray, angle: float, output_path: str = 
                     (blank['x1'], blank['y1']), 
                     (blank['x2'], blank['y2']), 
                     (0, 255, 0), 2)
-            print(f"  {idx}. 傾斜空白區 ({blank['angle']:.1f}°) from ({blank['x1']},{blank['y1']}) to ({blank['x2']},{blank['y2']}), 長度={blank['length']}px")
+            if idx <= 20:  # 只打印前20條
+                print(f"  {idx}. 傾斜空白區 ({blank['angle']:.1f}°) from ({blank['x1']},{blank['y1']}) to ({blank['x2']},{blank['y2']}), 長度={blank['length']}px")
     
     if len(blank_regions) > 20:
-        print(f"  ... (省略剩餘 {len(blank_regions)-20} 個)")
+        print(f"  ... (省略剩餘 {len(blank_regions)-20} 個的打印輸出)")
     
     # 儲存兩個版本的結果
     if output_path:
