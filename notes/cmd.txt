@@ -1,1 +1,0 @@
-python3 ocr_parser.py --image examples/fuji.png --preprocess --high-sensitivity --output fuji_result.json --visualize fuji_visual.jpg --verbose

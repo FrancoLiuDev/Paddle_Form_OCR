@@ -1,268 +1,169 @@
-# 离线 OCR 表单解析项目
+# Paddle Form OCR - 4 個獨立專案
 
-## ✨ 完全离线，无需 API
+這個資料夾包含 4 個獨立的專案，每個專案專注於不同的圖像預處理或 OCR 識別方法。
 
-使用 **PaddleOCR** 开源引擎进行文字识别
+## 專案結構
 
-### 特点
+```
+Paddle_Form_OCR_Projects/
+├── 1_Hough_Line_Detection/     # 霍夫直線檢測預處理
+├── 2_Scikit_Learn_PCA/         # PCA 主成分分析預處理
+├── 3_MobileNetV3_DL/           # MobileNetV3 深度學習預處理
+└── 4_OCR_Recognition/          # OCR 文字識別（可整合前 3 個專案）
+```
 
-- ✅ **完全离线** - 无需网络连接
-- ✅ **无需 API Key** - 不需要注册任何服务
-- ✅ **永久免费** - 开源免费
-- ✅ **隐私安全** - 数据不离开本地
-- ✅ **支持中英文** - 80+ 种语言
-- ✅ **高精度识别** - 基于深度学习
+## 各專案特點對比
 
-## 🚀 快速开始
+| 專案 | 優點 | 缺點 | 適用場景 |
+|------|------|------|----------|
+| **1. 霍夫直線檢測** | 速度快、無額外依賴 | 僅支援固定角度 | 表格、結構化文檔 |
+| **2. PCA 分析** | 任意角度、統計穩健 | 需 sklearn、較慢 | 純文字文檔 |
+| **3. 深度學習** | 最高精度、可訓練 | 需 GPU、需訓練數據 | 大量相似文檔 |
+| **4. OCR 識別** | 整合方案、靈活 | 依賴 PaddleOCR | 生產環境 |
 
-### 1. 安装依赖
+## 快速開始
+
+### 1. 霍夫直線檢測
 
 ```bash
-pip3 install -r requirements.txt --user
+cd 1_Hough_Line_Detection
+pip install -r requirements.txt
+python3 preprocess_hough.py --input ../test.jpg --output result.jpg --verbose
 ```
 
-首次运行会自动下载模型文件（约 20-30MB）
-
-### 2. 开始使用
+### 2. PCA 分析
 
 ```bash
-# 识别单个表单
-python3 ocr_parser.py --image form.jpg
-
-# 查看详细结果
-python3 ocr_parser.py --image form.jpg --verbose --pretty-print
-
-# 保存结果
-python3 ocr_parser.py --image form.jpg --output result.json
-
-# 批量处理
-python3 ocr_parser.py --image *.jpg --output-dir results/
-
-# 生成可视化图像（标注识别框）
-python3 ocr_parser.py --image form.jpg --visualize output_visual.jpg
+cd 2_Scikit_Learn_PCA
+pip install -r requirements.txt
+python3 preprocess_pca.py --input ../test.jpg --output result.jpg --verbose
 ```
 
-## 📝 使用示例
-
-### 命令行方式
+### 3. 深度學習
 
 ```bash
-# 中英文混合识别
-python3 ocr_parser.py --image form.jpg --lang ch_en
+cd 3_MobileNetV3_DL
+pip install -r requirements.txt
 
-# 使用 GPU 加速（需要 NVIDIA GPU + CUDA）
-python3 ocr_parser.py --image form.jpg --use-gpu
+# 訓練模型（需要準備訓練數據）
+python3 train.py --data-dir ./training_data --epochs 50
 
-# 批量处理并生成可视化
-python3 ocr_parser.py --image examples/*.jpg --output-dir results/ --visualize
+# 推理預測
+python3 preprocess_dl.py --input ../test.jpg --output result.jpg --model model.pth --verbose
 ```
 
-### Python 代码方式
-
-```python
-from form_parser import FormParser
-
-# 初始化解析器
-parser = FormParser(lang='ch', use_gpu=False)
-
-# 解析表单
-result = parser.parse_form("form.jpg")
-
-# 查看结果
-print(result)
-
-# 保存结果
-parser.save_result(result, "output.json")
-
-# 生成可视化图像
-parser.visualize_result("form.jpg", result, "visual.jpg")
-
-# 批量处理
-results = parser.parse_multiple_forms(["form1.jpg", "form2.jpg"])
-```
-
-## 📊 输出格式
-
-```json
-{
-  "success": true,
-  "image_path": "form.jpg",
-  "text_blocks": [
-    {
-      "text": "姓名",
-      "confidence": 0.98,
-      "position": [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
-    }
-  ],
-  "full_text": "完整的识别文字...",
-  "fields": {
-    "姓名": "张三",
-    "身份证": "123456789..."
-  },
-  "total_blocks": 10,
-  "ocr_engine": "PaddleOCR (Offline)"
-}
-```
-
-## 🎯 支持的功能
-
-- ✅ 中文识别
-- ✅ 英文识别  
-- ✅ 中英混合识别
-- ✅ 数字识别
-- ✅ 表格识别
-- ✅ 倾斜矫正
-- ✅ 批量处理
-- ✅ 结果可视化
-- ✅ GPU 加速
-
-## 💡 优化建议
-
-### 🔥 如果有些内文没有辨识出来？
-
-**最简单有效的方法：启用图像预处理**
+### 4. OCR 識別
 
 ```bash
-# 启用预处理（强烈推荐！）
-python3 ocr_parser.py --image form.jpg --preprocess
+cd 4_OCR_Recognition
+pip install -r requirements.txt
 
-# 🆕 启用高敏感度模式（识别更多文字）
-python3 ocr_parser.py --image form.jpg --high-sensitivity
+# 基本 OCR
+python3 ocr_parser.py --image test.jpg --output result.json
 
-# 🌟 终极组合（预处理 + 高敏感度）
-python3 ocr_parser.py --image form.jpg --preprocess --high-sensitivity
+# 使用 PCA 預處理
+python3 ocr_parser.py --image test.jpg --output result.json --preprocess --method pca --verbose
 
-# 查看效果对比（测试4种模式）
-python3 test_ocr.py form.jpg
+# 完整流程（預處理 + 高敏感度 + 可視化）
+python3 ocr_parser.py --image test.jpg --output result.json \
+    --preprocess --method pca --high-sensitivity \
+    --visualize output.jpg --verbose
 ```
 
-在代码中使用：
+## 如何選擇專案
 
-```python
-# 启用预处理可大幅提升识别率
-parser = FormParser(enable_preprocessing=True)
-result = parser.parse_form("form.jpg")
+### 場景 1: 快速原型
 
-# 🆕 启用高敏感度（识别更多文字）
-parser = FormParser(high_sensitivity=True)
-result = parser.parse_form("form.jpg")
+→ 使用 **專案 1（霍夫直線檢測）**
+- 速度最快
+- 不需要額外依賴
+- 適合初步測試
 
-# 🌟 终极组合（推荐！）
-parser = FormParser(
-    enable_preprocessing=True,
-    high_sensitivity=True
-)
-result = parser.parse_form("form.jpg")
-```
+### 場景 2: 任意角度文檔
 
-**预处理可以解决以下问题：**
-- ✅ 图像模糊
-- ✅ 光照不均匀
-- ✅ 对比度低
-- ✅ 有噪点污渍
-- ✅ 拍照倾斜
-- ✅ 小字体识别不清
+→ 使用 **專案 2（PCA）**
+- 支援任意角度
+- 不需要訓練
+- 適合多樣化文檔
 
-**🆕 高敏感度模式可以：**
-- ✅ 识别更多文字（+30~50%）
-- ✅ 识别小字体文字
-- ✅ 识别低对比度文字
-- ✅ 识别模糊文字
+### 場景 3: 高精度需求
 
-**详细改善方法请查看：**
-📚 [OCR 辨识率改善完整指南](OCR_IMPROVEMENT_GUIDE.md)  
-📚 [高敏感度模式使用指南](HIGH_SENSITIVITY_GUIDE.md)
+→ 使用 **專案 3（深度學習）**
+- 可通過訓練提升精度
+- 適應特定場景
+- 需要 GPU 和訓練數據
 
----
+### 場景 4: 生產部署
 
-### 提高识别精度
+→ 使用 **專案 4（OCR 識別）**
+- 整合多種方法
+- 完整的 OCR 流程
+- 靈活配置
 
-1. **🌟 使用图像预处理 + 高敏感度**（最推荐！）
-   ```bash
-   python3 ocr_parser.py --image form.jpg --preprocess --high-sensitivity
-   ```
+## 整合使用
 
-2. **使用图像预处理**（推荐）
-   ```bash
-   python3 ocr_parser.py --image form.jpg --preprocess
-   ```
-
-3. **🆕 使用高敏感度模式**（识别更多文字）
-   ```bash
-   python3 ocr_parser.py --image form.jpg --high-sensitivity
-   ```
-
-4. 使用清晰的图像（推荐 1000-3000px）
-5. 确保光线充足均匀
-6. 避免严重倾斜（会自动矫正小角度）
-7. 保持对比度清晰
-
-### 提高识别速度
+專案 4 可以整合前 3 個專案的預處理方法：
 
 ```bash
-# 使用 GPU（需要 CUDA）
-python3 ocr_parser.py --image form.jpg --use-gpu
+# 方法 1: 直接整合（推薦）
+cd 4_OCR_Recognition
+python3 ocr_parser.py --image test.jpg --preprocess --method pca
+
+# 方法 2: 管道處理
+cd 2_Scikit_Learn_PCA
+python3 preprocess_pca.py --input test.jpg --output preprocessed.jpg
+
+cd ../4_OCR_Recognition
+python3 ocr_parser.py --image ../2_Scikit_Learn_PCA/preprocessed.jpg --output result.json
 ```
 
-## 📦 项目结构
+## 開發與測試
 
-```
-Paddle_Form_OCR/
-├── form_parser.py              # 核心解析类
-├── image_preprocessor.py       # 图像预处理模块（新）
-├── ocr_parser.py               # 命令行工具
-├── test_ocr.py                 # OCR效果测试脚本（新）
-├── requirements.txt            # 依赖包列表
-├── README.md                   # 说明文档
-├── OCR_IMPROVEMENT_GUIDE.md    # 识别率改善指南（新）
-└── examples/                   # 示例图像目录
-```
-
-## 🆘 常见问题
-
-**Q: 有些内文没有辨识出来怎么办？**  
-A: 启用图像预处理：`python3 ocr_parser.py --image form.jpg --preprocess`  
-   详见 [OCR_IMPROVEMENT_GUIDE.md](OCR_IMPROVEMENT_GUIDE.md)
-
-**Q: 需要网络连接吗？**  
-A: 首次运行需要下载模型（约 20-30MB），之后完全离线
-
-**Q: 识别速度慢怎么办？**  
-A: 使用 `--use-gpu` 参数开启 GPU 加速
-
-**Q: 支持哪些语言？**  
-A: 支持 80+ 种语言，中文和英文效果最好
-
-**Q: 和 API 方案相比如何？**  
-A: 离线方案完全免费且保护隐私，API 方案精度可能更高
-
-**Q: 可以识别表格吗？**  
-A: 可以，PaddleOCR 支持表格结构识别
-
-## 📖 更多帮助
+### 測試單一專案
 
 ```bash
-# 查看命令行帮助
-python3 ocr_parser.py --help
+# 測試霍夫直線檢測
+cd 1_Hough_Line_Detection
+python3 preprocess_hough.py --input test.jpg --output result1.jpg --show-lines --verbose
 
-# 测试识别效果（对比预处理前后）
-python3 test_ocr.py form.jpg
+# 測試 PCA
+cd ../2_Scikit_Learn_PCA
+python3 preprocess_pca.py --input test.jpg --output result2.jpg --debug --verbose
 
-# 运行基础测试
-python3 form_parser.py
+# 比較結果
+# 查看 result1.jpg 和 result2.jpg 的差異
 ```
 
-**📚 详细文档：**
-- [OCR 辨识率改善完整指南](OCR_IMPROVEMENT_GUIDE.md) - 解决识别不全的问题
-- [图像预处理说明](image_preprocessor.py) - 了解预处理原理
+### 比較不同方法
 
-## 🌟 技术栈
+```bash
+cd 4_OCR_Recognition
 
-- **PaddleOCR** - 百度开源的 OCR 引擎
-- **OpenCV** - 图像处理
-- **NumPy** - 数值计算
-- **Pillow** - 图像读取
+# 不使用預處理
+python3 ocr_parser.py --image test.jpg --output result_none.json
 
----
+# 使用霍夫直線檢測
+python3 ocr_parser.py --image test.jpg --output result_hough.json --preprocess --method hough
 
-**完全离线，永久免费，保护隐私！** 🎉
+# 使用 PCA
+python3 ocr_parser.py --image test.jpg --output result_pca.json --preprocess --method pca
+
+# 比較結果
+cat result_*.json | grep "total_blocks"
+```
+
+## 依賴關係
+
+### 共通依賴
+- Python >= 3.7
+- OpenCV >= 4.5.0
+- NumPy >= 1.19.0
+
+### 特定依賴
+- 專案 2: scikit-learn >= 1.0.0
+- 專案 3: PyTorch >= 1.9.0, torchvision >= 0.10.0
+- 專案 4: PaddleOCR >= 2.6.0
+
+## 授權
+
+請參考各專案的 LICENSE 檔案
