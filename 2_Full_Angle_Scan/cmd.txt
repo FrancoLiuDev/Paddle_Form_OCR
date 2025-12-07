@@ -1,0 +1,25 @@
+# 全角度掃描 - 常用命令
+
+# 基本掃描（-90° 到 90°，每 1° 測試）
+python3 full_angle_scan.py --input ../fuji3.png
+
+# 粗掃描（快速定位大致範圍）
+python3 full_angle_scan.py --input ../fuji3.png --angle-step 5 --scan-step 10
+
+# 精細掃描（在 -20° 到 -5° 範圍內，每 0.1° 測試）
+python3 full_angle_scan.py --input ../fuji3.png --angle-start -20 --angle-end -5 --angle-step 0.1 --scan-step 1
+
+# 生成可視化圖像
+python3 full_angle_scan.py --input ../fuji3.png --visualize --output best_result.jpg
+
+# 顯示前 20 個最佳角度
+python3 full_angle_scan.py --input ../fuji3.png --top-n 20 --verbose
+
+# 360度全方位掃描，每3度一次（快速版）
+python3 full_angle_scan.py --input ../fuji3.png --angle-start 0 --angle-end 360 --angle-step 3 --scan-step 5 --white-threshold 199 --visualize --verbose --top-n 20
+
+# 360度全方位掃描，每3度一次（精確版）
+python3 full_angle_scan.py --input ../fuji3.png --angle-start 0 --angle-end 360 --angle-step 3 --scan-step 1 --white-threshold 199 --visualize --verbose --top-n 20
+
+# 完整精確掃描（最精細，但最慢）
+python3 full_angle_scan.py --input ../fuji3.png --angle-start -30 --angle-end 30 --angle-step 1 --scan-step 1 --white-threshold 199 --visualize --verbose
