@@ -320,6 +320,8 @@ def detect_blank_separators(image: np.ndarray, angle: float, output_path: str = 
         print(f"  使用相對空白檢測模式（尋找比掃描線平均值更白的區域）")
     
     filtered_by_dark_pixels = 0  # 統計被過濾掉的區段數
+    total_white_pixels = 0  # 統計所有白色點總數
+    total_scanned_pixels = 0  # 統計所有掃描到的點總數
     
     for scan_line in scanned_lines:
         points = scan_line['points']
@@ -328,6 +330,11 @@ def detect_blank_separators(image: np.ndarray, angle: float, output_path: str = 
         
         # 獲取這條掃描線上的所有像素值
         pixel_values = [gray[y, x] for x, y in points]
+        
+        # 統計總點數和白色點數
+        total_scanned_pixels += len(pixel_values)
+        white_pixels_in_line = sum(1 for pv in pixel_values if pv >= white_threshold)
+        total_white_pixels += white_pixels_in_line
         
         # 檢查整條線是否都沒有黑點（所有像素都 >= 220）
         min_pixel = min(pixel_values)
@@ -410,7 +417,33 @@ def detect_blank_separators(image: np.ndarray, angle: float, output_path: str = 
         cv2.imwrite(blank_path_full, result)
         print(f"  空白分隔線（含掃描線）已儲存至: {blank_path_full}")
     
-    return result
+    # 輸出統計摘要
+    line_detection_rate = (len(blank_regions) / len(scanned_lines) * 100) if len(scanned_lines) > 0 else 0
+    white_pixel_rate = (total_white_pixels / total_scanned_pixels * 100) if total_scanned_pixels > 0 else 0
+    
+    print(f"\n=== 空白檢測統計 ===")
+    print(f"  掃描線總數: {len(scanned_lines)} 條")
+    print(f"  檢測到的空白線: {len(blank_regions)} 條")
+    print(f"  過濾掉的線（有黑點）: {filtered_by_dark_pixels} 條")
+    print(f"  空白線檢出率: {line_detection_rate:.2f}% (空白線數/掃描線數)")
+    print(f"  掃描角度: {angle:.1f}°")
+    print(f"  掃描間隔: {scan_step} 像素")
+    print(f"  白色閾值: {white_threshold}")
+    print(f"  掃描總點數: {total_scanned_pixels:,} 點")
+    print(f"  白色點總數: {total_white_pixels:,} 點")
+    print(f"  白色點檢出率: {white_pixel_rate:.2f}% (白色點數/掃描點數)")
+    
+    # 返回統計數據
+    return {
+        'scan_lines': len(scanned_lines),
+        'detected_blanks': len(blank_regions),
+        'filtered_lines': filtered_by_dark_pixels,
+        'line_rate': line_detection_rate,
+        'total_pixels': total_scanned_pixels,
+        'white_pixels': total_white_pixels,
+        'white_rate': white_pixel_rate,
+        'angle': angle
+    }
 
 
 def rotate_image(image: np.ndarray, angle: float) -> np.ndarray:
@@ -515,6 +548,8 @@ def main():
     parser.add_argument('--show-lines', action='store_true', help='顯示檢測到的線條（紅色標記）')
     parser.add_argument('--degree', type=float, help='限定畫出紅線的角度範圍（例如：--degree 10 只畫出 ±10° 內的線條）')
     parser.add_argument('--detect-blanks', action='store_true', help='檢測空白分隔線（綠色標記）')
+    parser.add_argument('--scan-angle', type=float, help='直接指定空白掃描角度（例如：20 表示 20°），若未指定則使用霍夫檢測的角度')
+    parser.add_argument('--angle-offset', type=float, help='測試角度偏移（例如：5 會測試 偵測角度-5°、偵測角度、偵測角度+5° 三個角度並比對）')
     parser.add_argument('--scan-step', type=int, default=5, help='空白掃描間隔（像素，預設：5）')
     parser.add_argument('--min-blank', type=int, default=30, help='最小空白長度（像素，預設：30）')
     parser.add_argument('--white-threshold', type=int, default=240, help='白色閾值（0-255，預設：240）')
@@ -545,17 +580,87 @@ def main():
         result, most_common_angle = visualize_line_detection(image, args.output, degree_limit=args.degree)
         
         # 如果啟用空白檢測
-        if args.detect_blanks and most_common_angle is not None:
-            print(f"\n使用最常見角度 {most_common_angle:.2f}° 進行空白檢測...")
-            detect_blank_separators(
-                image, 
-                most_common_angle, 
-                args.output,
-                angle_tolerance=5.0,
-                scan_step=args.scan_step,
-                min_blank_length=args.min_blank,
-                white_threshold=args.white_threshold
-            )
+        if args.detect_blanks:
+            # 使用指定角度或霍夫檢測的角度
+            if args.scan_angle is not None:
+                base_angle = args.scan_angle
+                print(f"\n使用指定角度 {base_angle:.2f}° 作為基準...")
+            elif most_common_angle is not None:
+                base_angle = most_common_angle
+                print(f"\n使用霍夫檢測角度 {base_angle:.2f}° 作為基準...")
+            else:
+                print("\n警告: 未檢測到角度且未指定掃描角度，跳過空白檢測")
+                return
+            
+            # 如果指定了角度偏移，測試三個角度並比對
+            if args.angle_offset is not None:
+                offset = args.angle_offset
+                test_angles = [
+                    (base_angle - offset, f"{base_angle - offset:.1f}° (-{offset}°)"),
+                    (base_angle, f"{base_angle:.1f}° (基準)"),
+                    (base_angle + offset, f"{base_angle + offset:.1f}° (+{offset}°)")
+                ]
+                
+                print(f"\n{'='*70}")
+                print(f"三角度比對測試 (偏移 ±{offset}°)")
+                print(f"{'='*70}")
+                
+                results = []
+                for angle, label in test_angles:
+                    print(f"\n--- 測試 {label} ---")
+                    output_path = args.output.replace('.', f'_{angle:.1f}deg.')
+                    
+                    stats = detect_blank_separators(
+                        image, 
+                        angle, 
+                        output_path,
+                        angle_tolerance=5.0,
+                        scan_step=args.scan_step,
+                        min_blank_length=args.min_blank,
+                        white_threshold=args.white_threshold
+                    )
+                    
+                    # 記錄結果和統計數據
+                    results.append((angle, label, stats))
+                
+                # 顯示比對結果
+                print(f"\n{'='*70}")
+                print(f"三角度比對結果")
+                print(f"{'='*70}")
+                
+                # 找出空白線檢出率最高的角度
+                best_idx = max(range(len(results)), key=lambda i: results[i][2]['detected_blanks'])
+                
+                # 顯示數據比較表格
+                print(f"\n角度         掃描線   空白線   空白率     白色點數     白色率")
+                print(f"{'─'*70}")
+                for idx, (angle, label, stats) in enumerate(results):
+                    marker = ' ✅' if idx == best_idx else '   '
+                    print(f"{angle:5.1f}° {marker}  {stats['scan_lines']:6,}   "
+                          f"{stats['detected_blanks']:6}   {stats['line_rate']:5.2f}%   "
+                          f"{stats['white_pixels']:10,}   {stats['white_rate']:5.2f}%")
+                
+                best_angle, best_label, best_stats = results[best_idx]
+                print(f"\n最佳角度: {best_angle:.1f}° ({best_stats['detected_blanks']} 條空白線)")
+                
+                print(f"\n已生成三個輸出檔案:")
+                for angle, label, _ in results:
+                    output_name = args.output.replace('.', f'_{angle:.1f}deg.')
+                    print(f"  {label}: {output_name}")
+                print(f"\n請查看輸出圖片比較檢測效果")
+                
+            else:
+                # 單一角度檢測
+                print(f"\n使用角度 {base_angle:.2f}° 進行空白檢測...")
+                detect_blank_separators(
+                    image, 
+                    base_angle, 
+                    args.output,
+                    angle_tolerance=5.0,
+                    scan_step=args.scan_step,
+                    min_blank_length=args.min_blank,
+                    white_threshold=args.white_threshold
+                )
         return
     
     # 預處理

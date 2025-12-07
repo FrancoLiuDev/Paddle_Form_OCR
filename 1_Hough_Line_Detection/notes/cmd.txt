@@ -4,7 +4,13 @@ python3 preprocess_hough.py --input ../fuji.png --output result.jpg --verbose
 python3 preprocess_hough.py --input ../fuji.png --output result_with_lines.jpg --show-lines
 
 # 繪出線條 + 詳細信息（傾斜文件使用較低的白色閾值）
-python3 preprocess_hough.py --input ../fuji45.png --output result_with_lines.jpg --show-lines --detect-blanks --scan-step 1 --white-threshold 199 --min-blank 50 --degree 30 --verbose
+python3 preprocess_hough.py --input ../fuji.png --output result_with_lines.jpg --show-lines --detect-blanks --scan-step 1 --white-threshold 199 --min-blank 50 --degree 30 --verbose
 
 python3 preprocess_hough.py --input ../fuji45.png --output result_with_lines.jpg --show-lines   --scan-step 2 --white-threshold 240 --min-blank 2 --degree 30 --verbose
 fuji.png
+
+
+
+python3 preprocess_hough.py --input ../fuji.png --output result_compare.jpg --show-lines --detect-blanks --degree 30 --angle-offset 5 --scan-step 1 --white-threshold 199 --verbose
+
+python3 preprocess_hough.py --input ../fuji3.png --output result_compare.jpg --show-lines --detect-blanks --degree 30 --angle-offset 5 --scan-step 1 --white-threshold 199 --verbose
