@@ -138,6 +138,96 @@ class OCRParser:
         
         if self.verbose:
             print(f"✓ 可視化結果已儲存至: {output_path}")
+    
+    def create_text_image(self, image_path: str, result: Dict[str, Any], output_path: str):
+        """
+        創建純文字圖像（白底黑字）
+        將識別到的文字繪製在原始位置上
+        """
+        if not result.get("success"):
+            print("無法創建文字圖像：識別失敗")
+            return
+        
+        # 讀取原始圖像以獲取尺寸
+        original = cv2.imread(image_path)
+        if original is None:
+            print(f"無法讀取圖像: {image_path}")
+            return
+        
+        h, w = original.shape[:2]
+        
+        # 創建白色背景
+        text_image = np.ones((h, w, 3), dtype=np.uint8) * 255
+        
+        # 使用 PIL 來支援中文字體
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+            
+            # 轉換為 PIL 格式
+            pil_image = Image.fromarray(text_image)
+            draw = ImageDraw.Draw(pil_image)
+            
+            # 尋找中文字體路徑
+            font_path_found = None
+            font_paths = [
+                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+                "/usr/share/fonts/truetype/arphic/uming.ttc",
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            ]
+            
+            for fp in font_paths:
+                if os.path.exists(fp):
+                    font_path_found = fp
+                    break
+            
+            # 繪製所有文字，根據框的高度動態調整字體大小
+            for block in result.get("text_blocks", []):
+                text = block["text"]
+                bbox = block["bbox"]
+                
+                # 計算文字框的高度
+                box_height = abs(bbox[2][1] - bbox[0][1])
+                
+                # 根據框的高度設定字體大小（約為框高度的 0.7 倍）
+                font_size = max(8, int(box_height * 0.7))
+                
+                # 載入對應大小的字體
+                try:
+                    if font_path_found:
+                        font = ImageFont.truetype(font_path_found, font_size)
+                    else:
+                        font = ImageFont.load_default()
+                except:
+                    font = ImageFont.load_default()
+                
+                # 計算文字位置（使用邊界框的左上角）
+                x, y = int(bbox[0][0]), int(bbox[0][1])
+                
+                # 繪製黑色文字
+                draw.text((x, y), text, font=font, fill=(0, 0, 0))
+            
+            # 轉回 OpenCV 格式
+            text_image = np.array(pil_image)
+            
+        except ImportError:
+            if self.verbose:
+                print("警告: PIL 未安裝，使用 OpenCV 繪製（不支援中文）")
+            
+            # 使用 OpenCV 繪製（不支援中文）
+            for block in result.get("text_blocks", []):
+                text = block["text"]
+                bbox = block["bbox"]
+                x, y = int(bbox[0][0]), int(bbox[0][1])
+                
+                cv2.putText(text_image, text, (x, y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1)
+        
+        # 儲存
+        cv2.imwrite(output_path, text_image)
+        
+        if self.verbose:
+            print(f"✓ 文字圖像已儲存至: {output_path}")
 
 
 def preprocess_with_method(image_path: str, method: str, model_path: str = None, 
@@ -223,6 +313,7 @@ def main():
     parser.add_argument('--image', '-i', required=True, help='輸入圖像路徑')
     parser.add_argument('--output', '-o', help='輸出 JSON 檔案路徑')
     parser.add_argument('--visualize', '-v', help='可視化輸出路徑')
+    parser.add_argument('--text-image', '-t', help='純文字圖像輸出路徑（白底黑字）')
     parser.add_argument('--lang', default='ch', choices=['ch', 'en', 'ch_en'], 
                        help='識別語言')
     parser.add_argument('--use-gpu', action='store_true', help='使用 GPU 加速')
@@ -264,6 +355,10 @@ def main():
     # 可視化
     if args.visualize and result.get("success"):
         ocr_parser.visualize(args.image, result, args.visualize)
+    
+    # 創建純文字圖像
+    if args.text_image and result.get("success"):
+        ocr_parser.create_text_image(args.image, result, args.text_image)
     
     # 輸出結果
     if args.output:
