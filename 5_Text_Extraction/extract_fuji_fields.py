@@ -62,7 +62,7 @@ def extract_field_value(text_blocks, field_keywords, search_range=5):
 
 def main():
     # 讀取 OCR 結果
-    json_file = '../4_OCR_Recognition/result/result_fuji.json'
+    json_file = '../4_OCR_Recognition/result/result_fuji_test.json'
     
     with open(json_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -118,7 +118,7 @@ def main():
         'extracted_count': len(results)
     }
     
-    output_file = 'fuji_printer_info.json'
+    output_file = 'result/fuji_printer_info.json'
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
     

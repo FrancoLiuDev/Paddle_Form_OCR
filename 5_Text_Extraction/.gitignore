@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Result files (optional - uncomment if you don't want to track results)
+# result/*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
