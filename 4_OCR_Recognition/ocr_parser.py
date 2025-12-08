@@ -20,7 +20,8 @@ class OCRParser:
     """OCR 表單識別器"""
     
     def __init__(self, lang: str = 'ch', use_gpu: bool = False, 
-                 high_sensitivity: bool = False, verbose: bool = False):
+                 high_sensitivity: bool = False, verbose: bool = False,
+                 convert_fullwidth: bool = True):
         """
         初始化 OCR 識別器
         
@@ -29,8 +30,10 @@ class OCRParser:
             use_gpu: 是否使用 GPU
             high_sensitivity: 高敏感度模式（識別更多文字）
             verbose: 詳細輸出
+            convert_fullwidth: 自動將全形字符轉換為半形
         """
         self.verbose = verbose
+        self.convert_fullwidth = convert_fullwidth
         
         if verbose:
             print(f"正在初始化 PaddleOCR（語言: {lang}, GPU: {use_gpu}）...")
@@ -57,6 +60,67 @@ class OCRParser:
         
         if verbose:
             print("✓ PaddleOCR 初始化完成")
+    
+    @staticmethod
+    def fullwidth_to_halfwidth(text: str) -> str:
+        """
+        將全形字符轉換為半形字符
+        
+        全形字符範圍：
+        - 全形空格：U+3000 → 半形空格 U+0020
+        - 全形字符：U+FF01-U+FF5E → 半形 U+0021-U+007E
+        - 特殊中文標點符號對應
+        
+        Args:
+            text: 要轉換的文字
+            
+        Returns:
+            轉換後的文字
+            
+        Examples:
+            "１２３４" → "1234"
+            "ＡＢＣ" → "ABC"
+            "：；，。" → ":;,."
+            "（）［］" → "()[]"
+        """
+        # 特殊中文標點符號對應表
+        special_chars = {
+            '，': ',',  # 中文逗號
+            '。': '.',  # 中文句號
+            '：': ':',  # 中文冒號
+            '；': ';',  # 中文分號
+            '？': '?',  # 中文問號
+            '！': '!',  # 中文驚嘆號
+            '「': '"',  # 左引號
+            '」': '"',  # 右引號
+            '『': "'",  # 左單引號
+            '』': "'",  # 右單引號
+            '、': ',',  # 頓號
+            '《': '<',  # 左書名號
+            '》': '>',  # 右書名號
+        }
+        
+        result = []
+        for char in text:
+            code = ord(char)
+            
+            # 全形空格轉半形空格
+            if code == 0x3000:
+                result.append(chr(0x0020))
+            
+            # 全形字符轉半形（！～）
+            elif 0xFF01 <= code <= 0xFF5E:
+                result.append(chr(code - 0xFEE0))
+            
+            # 特殊中文標點符號轉換
+            elif char in special_chars:
+                result.append(special_chars[char])
+            
+            # 其他字符保持不變
+            else:
+                result.append(char)
+        
+        return ''.join(result)
     
     def recognize(self, image_path: str) -> Dict[str, Any]:
         """
@@ -87,11 +151,26 @@ class OCRParser:
             bbox = line[0]  # 座標
             text_info = line[1]  # (文字, 置信度)
             
-            text_blocks.append({
-                "text": text_info[0],
+            # 取得原始文字
+            original_text = text_info[0]
+            
+            # 如果啟用全形轉半形，進行轉換
+            if self.convert_fullwidth:
+                converted_text = self.fullwidth_to_halfwidth(original_text)
+            else:
+                converted_text = original_text
+            
+            text_block = {
+                "text": converted_text,
                 "confidence": float(text_info[1]),
                 "bbox": bbox
-            })
+            }
+            
+            # 如果有進行轉換，記錄原始文字
+            if self.convert_fullwidth and original_text != converted_text:
+                text_block["original_text"] = original_text
+            
+            text_blocks.append(text_block)
         
         if self.verbose:
             print(f"✓ 檢測到 {len(text_blocks)} 個文字塊")
@@ -319,6 +398,8 @@ def main():
     parser.add_argument('--use-gpu', action='store_true', help='使用 GPU 加速')
     parser.add_argument('--high-sensitivity', action='store_true', 
                        help='高敏感度模式')
+    parser.add_argument('--no-convert-fullwidth', action='store_true',
+                       help='停用全形轉半形功能（預設啟用）')
     parser.add_argument('--preprocess', action='store_true', help='啟用預處理')
     parser.add_argument('--method', choices=['hough', 'pca', 'dl'], default='pca',
                        help='預處理方法')
@@ -343,6 +424,7 @@ def main():
         lang=args.lang,
         use_gpu=args.use_gpu,
         high_sensitivity=args.high_sensitivity,
+        convert_fullwidth=not args.no_convert_fullwidth,  # 預設啟用，除非指定停用
         verbose=args.verbose
     )
     
