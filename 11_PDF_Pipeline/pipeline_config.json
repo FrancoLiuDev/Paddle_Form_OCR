@@ -1,0 +1,35 @@
+{
+  "pipeline_name": "PDF Processing Pipeline",
+  "version": "1.0.0",
+  "description": "步驟化處理 PDF 文件",
+  "steps": [
+    {
+      "step_id": "step1",
+      "name": "PDF 轉圖片",
+      "enabled": true,
+      "input": {
+        "source": "input/",
+        "type": "pdf",
+        "validation": "single_file"
+      },
+      "processing": {
+        "tool": "pdf_converter",
+        "parameters": {
+          "dpi": 300,
+          "format": "png",
+          "color": "rgb"
+        }
+      },
+      "output": {
+        "destination": "meta/images/",
+        "type": "images",
+        "format": "png",
+        "naming": "page_{num:03d}.png"
+      },
+      "log": {
+        "file": "logs/step1.log",
+        "level": "INFO"
+      }
+    }
+  ]
+}
