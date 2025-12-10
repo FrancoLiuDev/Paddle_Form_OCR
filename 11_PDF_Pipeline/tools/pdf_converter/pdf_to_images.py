@@ -50,7 +50,7 @@ class PDFToImages:
         if not pdf_path.exists():
             raise FileNotFoundError(f"找不到 PDF 檔案: {pdf_path}")
         
-        print(f"\n📄 正在處理: {pdf_path.name}")
+        print(f"\n正在處理: {pdf_path.name}")
         print(f"   設定: {self.dpi} DPI, 格式: {self.image_format}")
         print(f"   縮放倍數: {self.zoom:.2f}x")
         
@@ -184,10 +184,10 @@ def main():
         converter.convert_pdf(args.pdf_file)
         
     except FileNotFoundError as e:
-        print(f"\n❌ 錯誤: {e}")
+        print(f"\n錯誤: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ 處理失敗: {e}")
+        print(f"\n處理失敗: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

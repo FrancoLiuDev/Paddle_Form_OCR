@@ -12,6 +12,58 @@ import os
 from typing import Tuple, List, Optional
 
 
+def detect_and_fill_text_regions(image: np.ndarray) -> np.ndarray:
+    """
+    檢測文字密集區域並填黑，以突顯文字走向
+    
+    Args:
+        image: 輸入的灰階圖像
+        
+    Returns:
+        填黑文字區域後的圖像
+    """
+    result = image.copy()
+    
+    # 1. 使用自適應閾值二值化來檢測文字
+    binary = cv2.adaptiveThreshold(image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                   cv2.THRESH_BINARY_INV, 11, 2)
+    
+    # 2. 使用更小的形態學操作連接文字，避免過度填充
+    # 水平方向的核心，用於連接文字行（縮小尺寸）
+    kernel_horizontal = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 1))
+    # 垂直方向的核心，用於連接文字列（縮小尺寸）
+    kernel_vertical = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 8))
+    
+    # 3. 較溫和的膨脹操作連接文字
+    dilated_h = cv2.dilate(binary, kernel_horizontal, iterations=1)
+    dilated_v = cv2.dilate(binary, kernel_vertical, iterations=1)
+    
+    # 4. 合併水平和垂直方向的結果
+    combined = cv2.bitwise_or(dilated_h, dilated_v)
+    
+    # 5. 輕微膨脹以填滿文字區域（減少填充強度）
+    kernel_fill = cv2.getStructuringElement(cv2.MORPH_RECT, (8, 8))
+    filled = cv2.dilate(combined, kernel_fill, iterations=1)
+    
+    # 6. 使用輪廓檢測找到文字區域
+    contours, _ = cv2.findContours(filled, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # 7. 提高面積閾值，只保留真正密集的文字區域
+    min_area = 1500  # 提高最小區域面積
+    text_mask = np.zeros_like(image)
+    
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area > min_area:
+            # 使用原始輪廓而不是凸包，避免過度填充
+            cv2.fillPoly(text_mask, [contour], 255)
+    
+    # 8. 將文字區域填黑
+    result[text_mask == 255] = 0
+    
+    return result
+
+
 def detect_angle_by_lines(image: np.ndarray, verbose: bool = False) -> Tuple[int, float]:
     """
     使用霍夫直線檢測來判斷圖像需要旋轉的角度
@@ -22,11 +74,16 @@ def detect_angle_by_lines(image: np.ndarray, verbose: bool = False) -> Tuple[int
     """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
     
-    # 邊緣檢測
-    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    # 添加模糊處理以減少雜訊
+    if verbose:
+        print("  應用適度模糊...")
+    blurred = cv2.GaussianBlur(gray, (21, 21), 9.0)
     
-    # 霍夫直線檢測
-    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, minLineLength=50, maxLineGap=10)
+    # 邊緣檢測（高敏感度）
+    edges = cv2.Canny(blurred, 30, 100, apertureSize=3)
+    
+    # 霍夫直線檢測（高敏感度）
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=100, maxLineGap=20)
     
     if lines is None:
         if verbose:
@@ -88,7 +145,7 @@ def detect_angle_by_lines(image: np.ndarray, verbose: bool = False) -> Tuple[int
     return best_angle, confidence
 
 
-def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: Optional[float] = None, min_line_length: int = 100) -> np.ndarray:
+def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: Optional[float] = None, min_line_length: int = 50) -> np.ndarray:
     """
     可視化霍夫直線檢測結果，用紅色標記檢測到的線條
     並統計每條線與水平線的角度
@@ -102,11 +159,61 @@ def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: 
     result = image.copy()
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
     
-    # 邊緣檢測
-    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    # 添加強化模糊處理以減少雜訊
+    print("  應用強化模糊...")
+    blurred = cv2.GaussianBlur(gray, (35, 35), 10.0)
+    print(f"  模糊參數: kernel_size=(35,35), sigma=10.0 (強化模糊)")
     
-    # 霍夫直線檢測
-    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, minLineLength=50, maxLineGap=10)
+    # 添加強化銳化處理以增強邊緣
+    print("  應用強化銳化處理以增強邊緣...")
+    kernel_sharpen = np.array([[-2, -2, -2],
+                              [-2, 17, -2],
+                              [-2, -2, -2]])
+    sharpened = cv2.filter2D(blurred, -1, kernel_sharpen)
+    
+    # 再次應用更強的銳化
+    kernel_sharpen2 = np.array([[-1, -1, -1, -1, -1],
+                               [-1, -1, -1, -1, -1],
+                               [-1, -1, 25, -1, -1],
+                               [-1, -1, -1, -1, -1],
+                               [-1, -1, -1, -1, -1]])
+    sharpened = cv2.filter2D(sharpened, -1, kernel_sharpen2)
+    print(f"  銳化核心: 3x3 強化核心 + 5x5 超強核心")
+    
+    # 文字密集區域檢測和填黑處理
+    print("  檢測文字密集區域並填黑...")
+    text_filled = detect_and_fill_text_regions(sharpened)
+    print(f"  文字區域填黑完成")
+    
+    # 儲存處理過程的圖像
+    if output_path:
+        blurred_path = output_path.replace('.', '_blurred.')
+        cv2.imwrite(blurred_path, blurred)
+        print(f"  模糊圖像已儲存至: {blurred_path}")
+        
+        # 儲存銳化後的圖像
+        sharpened_path = output_path.replace('.', '_sharpened.')
+        cv2.imwrite(sharpened_path, sharpened)
+        print(f"  銳化圖像已儲存至: {sharpened_path}")
+        
+        # 儲存文字填黑後的圖像
+        text_filled_path = output_path.replace('.', '_text_filled.')
+        cv2.imwrite(text_filled_path, text_filled)
+        print(f"  文字填黑圖像已儲存至: {text_filled_path}")
+    
+    # 邊緣檢測（使用文字填黑後的圖像）
+    edges = cv2.Canny(text_filled, 30, 100, apertureSize=3)
+    print(f"  Canny 邊緣檢測參數: low_threshold=30, high_threshold=100 (高敏感度)")
+    
+    # 霍夫直線檢測（提高敏感度）
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=100, maxLineGap=20)
+    print(f"  霍夫變換參數: threshold=50, minLineLength=30, maxLineGap=20 (高敏感度)")
+    
+    # 初始化變數
+    filtered_lines = []
+    filtered_angles = []
+    filtered_lengths = []
+    most_common_angle = None
     
     if lines is not None:
         # 儲存所有角度和過濾後的線條
@@ -144,11 +251,33 @@ def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: 
             print(f"  符合長度限制 (≥{min_line_length}px) 的線: {len(candidate_lines)} 條")
         print(f"  使用最長的 {len(top_lines)} 條線進行角度計算")
         
-        # 繪製過濾後的線條（使用較粗的線條以便觀察）
-        line_thickness = 5  # 增加線條粗細
+        # 先計算最優角度，用於區分顏色
+        most_common_angle = None
+        if len(filtered_lines) > 0:
+            angles_array = np.array(filtered_angles)
+            lengths_array = np.array(filtered_lengths)
+            
+            # 使用長度加權計算最優角度（長線條權重更大）
+            rounded_angles = np.round(angles_array, 1)
+            angle_weights = {}
+            for angle, length in zip(rounded_angles, lengths_array):
+                if angle not in angle_weights:
+                    angle_weights[angle] = 0
+                angle_weights[angle] += length
+            
+            # 找出總長度最大的角度
+            weighted_best_angle = max(angle_weights.items(), key=lambda x: x[1])[0]
+            most_common_angle = weighted_best_angle
+        
+        # 繪製過濾後的線條（統一使用紅色）
+        line_thickness = 8  # 增加線條粗細為更明顯
         for line_coords in filtered_lines:
             x1, y1, x2, y2 = line_coords
-            cv2.line(result, (x1, y1), (x2, y2), (0, 0, 255), line_thickness)
+            
+            # 所有線條都用紅色
+            color = (0, 0, 255)  # 紅色
+            
+            cv2.line(result, (x1, y1), (x2, y2), color, line_thickness)
         
         # 顯示詳細信息
         if len(filtered_lines) > 0:
@@ -201,8 +330,12 @@ def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: 
             print(f"  {'長度加權最優角度:':<20} {weighted_best_angle:>6.2f}° ({weighted_count} 條線，總長 {weighted_total_length:.0f}px)")
             print(f"  {'標準差:':<20} {np.std(angles_array):>6.2f}°")
             
-            # 使用長度加權的角度作為最終輸出
+            # 使用長度加權的角度作為最終輸出（已在繪製時計算）
             most_common_angle = weighted_best_angle
+            
+            # 統計線條數量
+            print(f"  {'線條標記:':<20}")
+            print(f"  {'  紅色線條:':<20} {len(filtered_lines)} 條 (全部)")
         else:
             if degree_limit is not None:
                 print(f"\n  沒有符合角度範圍 (±{degree_limit}°) 的線條")
@@ -485,6 +618,7 @@ def detect_blank_separators(image: np.ndarray, angle: float, output_path: str = 
 
 def rotate_image(image: np.ndarray, angle: float) -> np.ndarray:
     """旋轉圖像"""
+    print(f"輸入角度: {angle}°")
     if angle == 0:
         return image
     
@@ -504,6 +638,7 @@ def rotate_image(image: np.ndarray, angle: float) -> np.ndarray:
         # getRotationMatrix2D: 正值=逆時針，負值=順時針
         # 修正: 直接使用 angle (檢測到-12°，轉-12°順時針修正)
         center = (w // 2, h // 2)
+        print(f"getRotationMatrix2D: {angle}°")
         matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
         return cv2.warpAffine(image, matrix, (w, h), 
                              flags=cv2.INTER_CUBIC, 
@@ -706,11 +841,9 @@ def main():
                     white_threshold=args.white_threshold
                 )
         
-        # show_lines 模式下也執行旋轉（使用檢測到的角度）
-        if most_common_angle is not None and abs(most_common_angle) > 0.1:
-            rotated = rotate_image(image, most_common_angle)
-            cv2.imwrite(args.output, rotated)
-            print(f"\n已儲存至: {args.output}")
+        # show_lines 模式下只儲存線條檢測結果，不進行旋轉
+        cv2.imwrite(args.output, result)
+        print(f"已儲存至: {args.output}")
         return
     
     # 預處理

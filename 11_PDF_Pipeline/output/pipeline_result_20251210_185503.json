@@ -1,0 +1,278 @@
+{
+  "pipeline": "PDF Processing Pipeline",
+  "version": "1.0.0",
+  "execution_time": "2025-12-10T18:55:03.525780",
+  "steps": [
+    {
+      "step_id": "step1",
+      "name": "PDF 轉圖片",
+      "status": "success",
+      "timestamp": "2025-12-10T18:54:19.896177",
+      "input": {
+        "file": "input\\013大安.pdf",
+        "size": 6500522
+      },
+      "processing": {
+        "start_time": "2025-12-10T18:54:19.896177",
+        "end_time": "2025-12-10T18:54:39.867686",
+        "duration_seconds": 19.971509
+      },
+      "output": {
+        "directory": "meta\\images",
+        "files_created": 14,
+        "total_size": 18747099,
+        "files": [
+          "page_001.png",
+          "page_002.png",
+          "page_003.png",
+          "page_004.png",
+          "page_005.png",
+          "page_006.png",
+          "page_007.png",
+          "page_008.png",
+          "page_009.png",
+          "page_010.png",
+          "page_011.png",
+          "page_012.png",
+          "page_013.png",
+          "page_014.png"
+        ]
+      }
+    },
+    {
+      "step_id": "step2",
+      "name": "圖片角度校正",
+      "status": "partial_success",
+      "timestamp": "2025-12-10T18:54:39.871911",
+      "input": {
+        "directory": "meta\\images",
+        "files_count": 28
+      },
+      "processing": {
+        "start_time": "2025-12-10T18:54:39.871911",
+        "end_time": "2025-12-10T18:55:03.521022",
+        "duration_seconds": 23.649111,
+        "success_count": 26,
+        "failed_count": 2,
+        "rotated_count": 4,
+        "skipped_count": 22,
+        "skip_threshold": 5.0
+      },
+      "output": {
+        "directory": "meta\\images_rotated",
+        "mode": "new_files"
+      },
+      "details": [
+        {
+          "file": "page_001.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_001.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_002.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_002.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_003.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_003.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_004.png",
+          "success": false,
+          "angle": -6.0,
+          "message": "處理完成但未產生輸出檔案",
+          "skipped": false
+        },
+        {
+          "file": "page_004.png",
+          "success": false,
+          "angle": -6.0,
+          "message": "處理完成但未產生輸出檔案",
+          "skipped": false
+        },
+        {
+          "file": "page_005.png",
+          "success": true,
+          "angle": -6.0,
+          "message": "成功校正 (角度: -6.00°)",
+          "skipped": false
+        },
+        {
+          "file": "page_005.png",
+          "success": true,
+          "angle": -6.0,
+          "message": "成功校正 (角度: -6.00°)",
+          "skipped": false
+        },
+        {
+          "file": "page_006.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_006.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_007.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_007.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_008.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_008.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_009.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_009.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_010.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_010.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_011.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_011.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_012.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_012.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_013.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_013.png",
+          "success": true,
+          "angle": 0.0,
+          "message": "角度 0.00° 在 ±5.0° 內，跳過旋轉",
+          "skipped": true
+        },
+        {
+          "file": "page_014.png",
+          "success": true,
+          "angle": -12.0,
+          "message": "成功校正 (角度: -12.00°)",
+          "skipped": false
+        },
+        {
+          "file": "page_014.png",
+          "success": true,
+          "angle": -12.0,
+          "message": "成功校正 (角度: -12.00°)",
+          "skipped": false
+        }
+      ]
+    },
+    {
+      "step_id": "step3",
+      "step_name": "OCR 文字識別",
+      "status": "failed",
+      "input": {},
+      "output": {},
+      "processing": {
+        "start_time": "2025-12-10T18:55:03.524755",
+        "end_time": "2025-12-10T18:55:03.525780",
+        "duration_seconds": 0.001025
+      },
+      "error": "Unknown argument: use_gpu"
+    }
+  ]
+}

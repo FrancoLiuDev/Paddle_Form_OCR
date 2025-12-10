@@ -48,11 +48,13 @@ class OCRParser:
             det_db_box_thresh = 0.5
             det_db_unclip_ratio = 1.6
         
+        # 設定設備類型
+        device_config = "gpu" if use_gpu else "cpu"
+        
         self.ocr = PaddleOCR(
             use_angle_cls=True,
             lang=lang,
-            use_gpu=use_gpu,
-            show_log=False,
+            device=device_config,
             det_db_thresh=det_db_thresh,
             det_db_box_thresh=det_db_box_thresh,
             det_db_unclip_ratio=det_db_unclip_ratio

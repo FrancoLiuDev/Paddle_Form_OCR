@@ -492,7 +492,7 @@ class Pipeline:
         with open(self.config_file, 'r', encoding='utf-8') as f:
             self.config = json.load(f)
         
-        print(f"✓ 載入配置: {self.config['pipeline_name']} v{self.config['version']}")
+        print(f"載入配置: {self.config['pipeline_name']} v{self.config['version']}")
         
     def run(self):
         """執行 Pipeline"""
@@ -504,7 +504,7 @@ class Pipeline:
         
         for step_config in self.config['steps']:
             if not step_config.get('enabled', True):
-                print(f"⊘ 跳過已停用的步驟: {step_config['name']}")
+                print(f"跳過已停用的步驟: {step_config['name']}")
                 continue
             
             step_id = step_config['step_id']
@@ -536,7 +536,7 @@ class Pipeline:
             
             # 如果失敗，停止後續步驟
             if result['status'] == 'failed':
-                print(f"\n✗ Pipeline 因步驟失敗而中止")
+                print(f"\nPipeline 因步驟失敗而中止")
                 break
         
         # 儲存整體結果
@@ -563,7 +563,7 @@ class Pipeline:
                 "steps": results
             }, f, ensure_ascii=False, indent=2)
         
-        print(f"\n✓ 結果已儲存: {result_file}")
+        print(f"\n結果已儲存: {result_file}")
 
 
 def main():
@@ -583,7 +583,7 @@ def main():
             return 1
             
     except Exception as e:
-        print(f"\n✗ Pipeline 執行錯誤: {str(e)}")
+        print(f"\nPipeline 執行錯誤: {str(e)}")
         import traceback
         traceback.print_exc()
         return 1
