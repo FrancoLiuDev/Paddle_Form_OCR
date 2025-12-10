@@ -579,6 +579,10 @@ def main():
             print(f"  角度過濾: ±{args.degree}°")
         result, most_common_angle = visualize_line_detection(image, args.output, degree_limit=args.degree)
         
+        # 顯示最終輸出角度
+        if most_common_angle is not None:
+            print(f"\n✓ 最終輸出角度: {most_common_angle:.2f}° (最多出現的角度)")
+        
         # 如果啟用空白檢測
         if args.detect_blanks:
             # 使用指定角度或霍夫檢測的角度
@@ -587,7 +591,7 @@ def main():
                 print(f"\n使用指定角度 {base_angle:.2f}° 作為基準...")
             elif most_common_angle is not None:
                 base_angle = most_common_angle
-                print(f"\n使用霍夫檢測角度 {base_angle:.2f}° 作為基準...")
+                print(f"\n使用最多出現的角度 {base_angle:.2f}° 作為基準...")
             else:
                 print("\n警告: 未檢測到角度且未指定掃描角度，跳過空白檢測")
                 return
