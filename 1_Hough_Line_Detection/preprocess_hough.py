@@ -88,7 +88,7 @@ def detect_angle_by_lines(image: np.ndarray, verbose: bool = False) -> Tuple[int
     return best_angle, confidence
 
 
-def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: Optional[float] = None) -> np.ndarray:
+def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: Optional[float] = None, min_line_length: int = 100) -> np.ndarray:
     """
     可視化霍夫直線檢測結果，用紅色標記檢測到的線條
     並統計每條線與水平線的角度
@@ -97,6 +97,7 @@ def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: 
         image: 輸入圖像
         output_path: 輸出路徑
         degree_limit: 角度限制（例如 10 表示只顯示 ±10° 內的線條），None 表示顯示全部
+        min_line_length: 最小線條長度（像素），用於過濾短線條
     """
     result = image.copy()
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
@@ -110,28 +111,44 @@ def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: 
     if lines is not None:
         # 儲存所有角度和過濾後的線條
         all_angles = []
-        filtered_lines = []
-        filtered_angles = []
+        candidate_lines = []  # 暫存符合條件的線條
         
-        # 計算所有線條的角度
+        # 第一步：計算所有線條的角度和長度，過濾角度範圍
         for line in lines:
             x1, y1, x2, y2 = line[0]
             angle = np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi
+            length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)  # 計算線條長度
             all_angles.append(angle)
             
-            # 判斷是否在角度範圍內
-            if degree_limit is None or abs(angle) <= degree_limit:
-                filtered_lines.append(line[0])
-                filtered_angles.append(angle)
+            # 判斷是否在角度範圍內且長度足夠
+            if (degree_limit is None or abs(angle) <= degree_limit) and length >= min_line_length:
+                candidate_lines.append({
+                    'coords': line[0],
+                    'angle': angle,
+                    'length': length
+                })
+        
+        # 第二步：按長度排序，只取最長的 20 條
+        candidate_lines.sort(key=lambda x: x['length'], reverse=True)
+        top_lines = candidate_lines[:20]  # 只取前 20 條最長的線
+        
+        # 提取最終使用的線條資訊
+        filtered_lines = [line['coords'] for line in top_lines]
+        filtered_angles = [line['angle'] for line in top_lines]
+        filtered_lengths = [line['length'] for line in top_lines]
         
         print(f"  檢測到 {len(lines)} 條線")
         if degree_limit is not None:
-            print(f"  符合角度範圍 (±{degree_limit}°) 的線: {len(filtered_lines)} 條")
+            print(f"  符合角度範圍 (±{degree_limit}°) 的線: {len(candidate_lines)} 條")
+        if min_line_length > 0:
+            print(f"  符合長度限制 (≥{min_line_length}px) 的線: {len(candidate_lines)} 條")
+        print(f"  使用最長的 {len(top_lines)} 條線進行角度計算")
         
-        # 繪製過濾後的線條
+        # 繪製過濾後的線條（使用較粗的線條以便觀察）
+        line_thickness = 5  # 增加線條粗細
         for line_coords in filtered_lines:
             x1, y1, x2, y2 = line_coords
-            cv2.line(result, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            cv2.line(result, (x1, y1), (x2, y2), (0, 0, 255), line_thickness)
         
         # 顯示詳細信息
         if len(filtered_lines) > 0:
@@ -151,14 +168,29 @@ def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: 
             
             # 統計過濾後的角度分布
             angles_array = np.array(filtered_angles)
+            lengths_array = np.array(filtered_lengths)
             
-            # 計算最多出現的角度（眾數）
-            # 將角度四捨五入到 0.1 度來統計
+            # 方法1: 計算最多出現的角度（眾數，不考慮長度）
             rounded_angles = np.round(angles_array, 1)
             unique_angles, counts = np.unique(rounded_angles, return_counts=True)
             most_common_idx = np.argmax(counts)
             most_common_angle = unique_angles[most_common_idx]
             most_common_count = counts[most_common_idx]
+            
+            # 方法2: 使用長度加權計算最優角度（長線條權重更大）
+            # 將角度分組（每0.1度一組），累加每組的總長度
+            angle_weights = {}
+            for angle, length in zip(rounded_angles, lengths_array):
+                if angle not in angle_weights:
+                    angle_weights[angle] = 0
+                angle_weights[angle] += length
+            
+            # 找出總長度最大的角度
+            weighted_best_angle = max(angle_weights.items(), key=lambda x: x[1])[0]
+            weighted_total_length = angle_weights[weighted_best_angle]
+            
+            # 計算該角度的線條數量
+            weighted_count = np.sum(rounded_angles == weighted_best_angle)
             
             print(f"\n  過濾後角度統計:")
             print(f"  {'最小角度:':<20} {np.min(angles_array):>6.2f}°")
@@ -166,7 +198,11 @@ def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: 
             print(f"  {'平均角度:':<20} {np.mean(angles_array):>6.2f}°")
             print(f"  {'中位數角度:':<20} {np.median(angles_array):>6.2f}°")
             print(f"  {'最多出現的角度:':<20} {most_common_angle:>6.2f}° (出現 {most_common_count} 次)")
+            print(f"  {'長度加權最優角度:':<20} {weighted_best_angle:>6.2f}° ({weighted_count} 條線，總長 {weighted_total_length:.0f}px)")
             print(f"  {'標準差:':<20} {np.std(angles_array):>6.2f}°")
+            
+            # 使用長度加權的角度作為最終輸出
+            most_common_angle = weighted_best_angle
         else:
             if degree_limit is not None:
                 print(f"\n  沒有符合角度範圍 (±{degree_limit}°) 的線條")
@@ -182,8 +218,9 @@ def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: 
     else:
         print("  未檢測到線條")
     
-    # 儲存可視化結果
-    if output_path:
+    # 可選：儲存可視化結果圖片（透過環境變數 SAVE_LINES_IMAGE=1 啟用）
+    import os
+    if output_path and os.environ.get('SAVE_LINES_IMAGE', '0') == '1':
         vis_path = output_path.replace('.', '_lines.')
         cv2.imwrite(vis_path, result)
         print(f"\n  線條可視化已儲存至: {vis_path}")
@@ -463,8 +500,11 @@ def rotate_image(image: np.ndarray, angle: float) -> np.ndarray:
         return cv2.rotate(image, cv2.ROTATE_180)
     else:
         # 任意角度旋轉
+        # arctan2: 負值=向左傾斜，正值=向右傾斜
+        # getRotationMatrix2D: 正值=逆時針，負值=順時針
+        # 修正: 直接使用 angle (檢測到-12°，轉-12°順時針修正)
         center = (w // 2, h // 2)
-        matrix = cv2.getRotationMatrix2D(center, -angle, 1.0)
+        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
         return cv2.warpAffine(image, matrix, (w, h), 
                              flags=cv2.INTER_CUBIC, 
                              borderMode=cv2.BORDER_REPLICATE)
@@ -581,7 +621,7 @@ def main():
         
         # 顯示最終輸出角度
         if most_common_angle is not None:
-            print(f"\n✓ 最終輸出角度: {most_common_angle:.2f}° (最多出現的角度)")
+            print(f"\n✓ 最終輸出角度: {most_common_angle:.2f}° (長度加權最優角度)")
         
         # 如果啟用空白檢測
         if args.detect_blanks:
@@ -665,6 +705,12 @@ def main():
                     min_blank_length=args.min_blank,
                     white_threshold=args.white_threshold
                 )
+        
+        # show_lines 模式下也執行旋轉（使用檢測到的角度）
+        if most_common_angle is not None and abs(most_common_angle) > 0.1:
+            rotated = rotate_image(image, most_common_angle)
+            cv2.imwrite(args.output, rotated)
+            print(f"\n已儲存至: {args.output}")
         return
     
     # 預處理

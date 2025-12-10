@@ -30,6 +30,62 @@
         "file": "logs/step1.log",
         "level": "INFO"
       }
+    },
+    {
+      "step_id": "step2",
+      "name": "圖片角度校正",
+      "enabled": true,
+      "input": {
+        "source": "meta/images/",
+        "type": "images",
+        "validation": "has_files"
+      },
+      "processing": {
+        "tool": "rotation_corrector",
+        "parameters": {
+          "degree": 30,
+          "skip_threshold": 5.0,
+          "inplace": false
+        }
+      },
+      "output": {
+        "destination": "meta/images_rotated/",
+        "type": "images",
+        "format": "png"
+      },
+      "log": {
+        "file": "logs/step2.log",
+        "level": "INFO"
+      }
+    },
+    {
+      "step_id": "step3",
+      "name": "OCR 文字識別",
+      "enabled": true,
+      "input": {
+        "source": "meta/images_rotated/",
+        "type": "images",
+        "validation": "has_files"
+      },
+      "processing": {
+        "tool": "ocr_recognizer",
+        "parameters": {
+          "lang": "ch",
+          "use_gpu": false,
+          "high_sensitivity": false,
+          "convert_fullwidth": true
+        }
+      },
+      "output": {
+        "destination": "meta/ocr/",
+        "type": "json",
+        "format": "json",
+        "naming": "page_{num:03d}.json"
+      },
+      "log": {
+        "file": "logs/step3.log",
+        "level": "INFO"
+      }
     }
   ]
 }

@@ -13,9 +13,15 @@ from datetime import datetime
 import shutil
 import subprocess
 
-# 加入 tools 模組路徑
-sys.path.insert(0, str(Path(__file__).parent))
-from tools import PDFConverter
+# 加入 tools 模組路徑（必須在最前面，避免與 PaddleOCR 的 tools 衝突）
+_SCRIPT_DIR = Path(__file__).parent
+_TOOLS_DIR = _SCRIPT_DIR / "tools"
+sys.path.insert(0, str(_SCRIPT_DIR))
+
+# 從本地 tools 模組導入
+from tools.pdf_converter import PDFConverter
+from tools.rotation_corrector import RotationCorrector
+from tools.ocr_recognizer import OCRRecognizer
 
 
 class PipelineLogger:
@@ -184,6 +190,292 @@ class Step1_PDFToImages:
             return result_data
 
 
+class Step2_RotationCorrection:
+    """Step 2: 圖片角度校正"""
+    
+    def __init__(self, config, logger):
+        self.config = config
+        self.logger = logger
+        self.step_id = config['step_id']
+        self.name = config['name']
+        
+    def validate_input(self):
+        """驗證輸入"""
+        input_dir = Path(self.config['input']['source'])
+        
+        if not input_dir.exists():
+            raise FileNotFoundError(f"輸入目錄不存在: {input_dir}")
+        
+        # 檢查是否有圖片檔案
+        image_files = []
+        for ext in ['*.png', '*.jpg', '*.jpeg']:
+            image_files.extend(input_dir.glob(ext))
+        
+        if len(image_files) == 0:
+            raise FileNotFoundError(f"在 {input_dir} 中找不到圖片檔案")
+        
+        self.input_dir = input_dir
+        self.image_files = sorted(image_files)
+        self.logger.info(f"✓ 輸入驗證通過: 找到 {len(self.image_files)} 張圖片")
+        return True
+        
+    def execute(self):
+        """執行步驟"""
+        start_time = datetime.now()
+        
+        try:
+            # 驗證輸入
+            self.validate_input()
+            
+            # 執行角度校正
+            self.logger.info(f"開始執行: {self.name}")
+            self.logger.info(f"輸入目錄: {self.input_dir}")
+            self.logger.info(f"圖片數量: {len(self.image_files)}")
+            
+            # 使用 RotationCorrector 工具
+            params = self.config['processing']['parameters']
+            corrector = RotationCorrector(
+                degree=params.get('degree', 30),
+                skip_threshold=params.get('skip_threshold', 5.0)
+            )
+            
+            self.logger.info(f"使用角度範圍: ±{corrector.degree}°")
+            self.logger.info(f"跳過閾值: ±{corrector.skip_threshold}°")
+            self.logger.info(f"處理模式: {'覆蓋原圖' if params.get('inplace', False) else '另存新檔'}")
+            
+            # 批次執行校正
+            output_dir = Path(self.config['output']['destination'])
+            success_count, total_count, results = corrector.correct_batch(
+                self.input_dir,
+                output_dir if not params.get('inplace', False) else None,
+                inplace=params.get('inplace', False),
+                verbose=False
+            )
+            
+            # 記錄每個檔案的處理結果
+            skipped_count = 0
+            rotated_count = 0
+            
+            for result in results:
+                if result['success']:
+                    angle_info = f" (角度: {result['angle']:.2f}°)" if result['angle'] is not None else ""
+                    if result.get('skipped', False):
+                        self.logger.info(f"  ⊙ {result['file']}{angle_info} - 跳過旋轉")
+                        skipped_count += 1
+                    else:
+                        self.logger.info(f"  ✓ {result['file']}{angle_info} - 已旋轉")
+                        rotated_count += 1
+                else:
+                    self.logger.warning(f"  ✗ {result['file']}: {result['message']}")
+            
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            # 記錄結果
+            result_data = {
+                "step_id": self.step_id,
+                "name": self.name,
+                "status": "success" if success_count == total_count else "partial_success",
+                "timestamp": start_time.isoformat(),
+                "input": {
+                    "directory": str(self.input_dir),
+                    "files_count": total_count
+                },
+                "processing": {
+                    "start_time": start_time.isoformat(),
+                    "end_time": end_time.isoformat(),
+                    "duration_seconds": duration,
+                    "success_count": success_count,
+                    "failed_count": total_count - success_count,
+                    "rotated_count": rotated_count,
+                    "skipped_count": skipped_count,
+                    "skip_threshold": corrector.skip_threshold
+                },
+                "output": {
+                    "directory": str(output_dir),
+                    "mode": "inplace" if params.get('inplace', False) else "new_files"
+                },
+                "details": results
+            }
+            
+            self.logger.info(f"✓ 步驟完成")
+            self.logger.info(f"  - 處理成功: {success_count}/{total_count} 張")
+            self.logger.info(f"  - 已旋轉: {rotated_count} 張")
+            self.logger.info(f"  - 跳過旋轉: {skipped_count} 張 (角度在 ±{corrector.skip_threshold}° 內)")
+            self.logger.info(f"  - 執行時間: {duration:.2f} 秒")
+            
+            if success_count < total_count:
+                self.logger.warning(f"  ! 有 {total_count - success_count} 張圖片處理失敗")
+            
+            return result_data
+            
+        except Exception as e:
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            self.logger.error(f"✗ 步驟失敗: {str(e)}")
+            
+            result_data = {
+                "step_id": self.step_id,
+                "name": self.name,
+                "status": "failed",
+                "timestamp": start_time.isoformat(),
+                "processing": {
+                    "start_time": start_time.isoformat(),
+                    "end_time": end_time.isoformat(),
+                    "duration_seconds": duration
+                },
+                "error": str(e)
+            }
+            
+            return result_data
+
+
+class Step3_OCRRecognition:
+    """步驟 3: OCR 文字識別"""
+    
+    def __init__(self, config, logger):
+        self.config = config
+        self.logger = logger
+        self.step_id = config['step_id']
+        self.step_name = config['name']
+        
+        # 取得配置
+        self.input_config = config.get('input', {})
+        self.output_config = config.get('output', {})
+        self.processing_config = config.get('processing', {})
+        
+        # 路徑
+        self.input_dir = Path(self.input_config.get('source', 'meta/images_rotated'))
+        self.output_dir = Path(self.output_config.get('destination', 'meta/ocr'))
+        
+        # 處理參數
+        params = self.processing_config.get('parameters', {})
+        self.lang = params.get('lang', 'ch')
+        self.use_gpu = params.get('use_gpu', False)
+        self.high_sensitivity = params.get('high_sensitivity', False)
+        self.convert_fullwidth = params.get('convert_fullwidth', True)
+    
+    def validate_input(self):
+        """驗證輸入"""
+        if not self.input_dir.exists():
+            raise ValueError(f"輸入目錄不存在: {self.input_dir}")
+        
+        # 檢查是否有圖片
+        image_files = list(self.input_dir.glob("*.png")) + list(self.input_dir.glob("*.jpg"))
+        if not image_files:
+            raise ValueError(f"輸入目錄沒有圖片: {self.input_dir}")
+        
+        self.logger.info(f"✓ 輸入驗證通過: 找到 {len(image_files)} 張圖片")
+        return True
+    
+    def execute(self):
+        """執行 OCR 識別"""
+        result_data = {
+            "step_id": self.step_id,
+            "step_name": self.step_name,
+            "status": "unknown",
+            "input": {},
+            "output": {},
+            "processing": {}
+        }
+        
+        try:
+            start_time = datetime.now()
+            
+            # 驗證輸入
+            self.validate_input()
+            
+            # 記錄開始
+            self.logger.info(f"開始執行: {self.step_name}")
+            self.logger.info(f"輸入目錄: {self.input_dir}")
+            self.logger.info(f"輸出目錄: {self.output_dir}")
+            self.logger.info(f"語言: {self.lang}, GPU: {self.use_gpu}")
+            self.logger.info(f"高敏感度: {self.high_sensitivity}, 全形轉換: {self.convert_fullwidth}")
+            
+            # 建立 OCR 識別器
+            recognizer = OCRRecognizer(
+                lang=self.lang,
+                use_gpu=self.use_gpu,
+                high_sensitivity=self.high_sensitivity,
+                convert_fullwidth=self.convert_fullwidth,
+                verbose=False  # 使用 logger 而非 print
+            )
+            
+            # 批次處理
+            success_count, total_count, results = recognizer.recognize_batch(
+                input_dir=self.input_dir,
+                output_dir=self.output_dir
+            )
+            
+            # 記錄每個檔案的結果
+            for result in results:
+                if result['success']:
+                    self.logger.info(f"  ✓ {result['file']} → {result['output']} ({result['blocks']} 個文字塊)")
+                else:
+                    self.logger.warning(f"  ✗ {result['file']}: {result['message']}")
+            
+            # 計算統計
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            # 計算總文字塊數
+            total_blocks = sum(r['blocks'] for r in results)
+            
+            # 記錄完成
+            self.logger.info(f"✓ 步驟完成")
+            self.logger.info(f"  - 處理成功: {success_count}/{total_count} 張")
+            self.logger.info(f"  - 總文字塊: {total_blocks} 個")
+            self.logger.info(f"  - 執行時間: {duration:.2f} 秒")
+            
+            # 組織結果資料
+            result_data.update({
+                "status": "success" if success_count == total_count else "partial",
+                "input": {
+                    "source": str(self.input_dir),
+                    "total_images": total_count
+                },
+                "output": {
+                    "destination": str(self.output_dir),
+                    "json_files": success_count,
+                    "format": "JSON"
+                },
+                "processing": {
+                    "tool": "ocr_recognizer",
+                    "parameters": {
+                        "lang": self.lang,
+                        "use_gpu": self.use_gpu,
+                        "high_sensitivity": self.high_sensitivity,
+                        "convert_fullwidth": self.convert_fullwidth
+                    },
+                    "success_count": success_count,
+                    "total_count": total_count,
+                    "total_text_blocks": total_blocks,
+                    "results": results,
+                    "start_time": start_time.isoformat(),
+                    "end_time": end_time.isoformat(),
+                    "duration_seconds": duration
+                }
+            })
+            
+            return result_data
+            
+        except Exception as e:
+            self.logger.error(f"✗ 步驟失敗: {str(e)}")
+            
+            result_data.update({
+                "status": "failed",
+                "processing": {
+                    "start_time": start_time.isoformat() if 'start_time' in locals() else None,
+                    "end_time": datetime.now().isoformat(),
+                    "duration_seconds": (datetime.now() - start_time).total_seconds() if 'start_time' in locals() else 0
+                },
+                "error": str(e)
+            })
+            
+            return result_data
+
+
 class Pipeline:
     """主 Pipeline 類別"""
     
@@ -230,6 +522,10 @@ class Pipeline:
             # 執行對應的步驟
             if step_id == "step1":
                 step = Step1_PDFToImages(step_config, logger)
+            elif step_id == "step2":
+                step = Step2_RotationCorrection(step_config, logger)
+            elif step_id == "step3":
+                step = Step3_OCRRecognition(step_config, logger)
             else:
                 logger.warning(f"未實作的步驟: {step_id}")
                 continue

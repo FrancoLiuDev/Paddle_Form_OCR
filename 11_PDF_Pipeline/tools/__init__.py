@@ -4,5 +4,7 @@ Pipeline 工具模組
 """
 
 from .pdf_converter import PDFConverter
+from .rotation_corrector import RotationCorrector
+from .ocr_recognizer import OCRRecognizer
 
-__all__ = ['PDFConverter']
+__all__ = ['PDFConverter', 'RotationCorrector', 'OCRRecognizer']
