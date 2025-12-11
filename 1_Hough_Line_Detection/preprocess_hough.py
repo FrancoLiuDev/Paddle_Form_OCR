@@ -12,6 +12,149 @@ import os
 from typing import Tuple, List, Optional
 
 
+def detect_optimal_angle(image: np.ndarray, verbose: bool = False) -> Optional[float]:
+    """
+    檢測圖像的最佳修正角度
+    
+    Args:
+        image: 輸入圖像
+        verbose: 是否顯示詳細輸出
+        
+    Returns:
+        最佳修正角度，如果檢測失敗則返回 None
+    """
+    if verbose:
+        print("  正在檢測最佳角度...")
+    
+    # 使用線條檢測獲取角度
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
+    
+    # 應用強化模糊
+    blurred = cv2.GaussianBlur(gray, (35, 35), 10.0)
+    
+    # 雙層銳化處理
+    kernel_sharpen1 = np.array([[-2, -2, -2], [-2, 17, -2], [-2, -2, -2]])
+    sharpened = cv2.filter2D(blurred, -1, kernel_sharpen1)
+    
+    kernel_sharpen2 = np.array([[-1, -1, -1, -1, -1], [-1, -1, -1, -1, -1], 
+                               [-1, -1, 25, -1, -1], [-1, -1, -1, -1, -1], [-1, -1, -1, -1, -1]])
+    sharpened = cv2.filter2D(sharpened, -1, kernel_sharpen2)
+    
+    # 文字區域填黑
+    text_filled = detect_and_fill_text_regions(sharpened)
+    
+    # 邊緣檢測
+    edges = cv2.Canny(text_filled, 30, 100, apertureSize=3)
+    
+    # 霍夫線檢測
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=100, maxLineGap=20)
+    
+    if lines is None or len(lines) < 5:
+        if verbose:
+            print("  檢測到的線條不足，無法確定角度")
+        return None
+    
+    # 計算所有線條角度
+    angles = []
+    lengths = []
+    
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        angle = np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi
+        length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+        
+        if length >= 50:  # 只考慮長度足夠的線條
+            angles.append(angle)
+            lengths.append(length)
+    
+    if len(angles) < 3:
+        if verbose:
+            print("  有效線條不足，無法確定角度")
+        return None
+    
+    # 按長度加權計算最優角度
+    angles = np.array(angles)
+    lengths = np.array(lengths)
+    
+    # 擴大角度檢測範圍，處理更大傾斜
+    horizontal_mask = np.abs(angles) <= 45  # 擴大到 ±45°
+    vertical_mask = (np.abs(angles) >= 45) & (np.abs(angles) <= 135)
+    
+    if verbose:
+        print(f"  檢測到 {len(angles)} 條有效線條")
+        print(f"  水平方向線條: {np.sum(horizontal_mask)} 條")
+        print(f"  垂直方向線條: {np.sum(vertical_mask)} 條")
+    
+    if np.sum(horizontal_mask) >= np.sum(vertical_mask) and np.sum(horizontal_mask) > 0:
+        # 水平線條較多，計算平均角度
+        h_angles = angles[horizontal_mask]
+        h_weights = lengths[horizontal_mask]
+        weighted_angle = np.average(h_angles, weights=h_weights)
+        optimal_angle = -weighted_angle  # 負號表示反方向修正
+        
+        if verbose:
+            print(f"  基於水平線條計算，平均角度: {weighted_angle:.2f}°")
+            
+    elif np.sum(vertical_mask) > 0:
+        # 垂直線條較多，轉換為水平角度
+        v_angles = angles[vertical_mask]
+        # 將垂直角度轉為對應的水平修正角度
+        h_equivalent = np.where(v_angles > 0, v_angles - 90, v_angles + 90)
+        v_weights = lengths[vertical_mask]
+        weighted_angle = np.average(h_equivalent, weights=v_weights)
+        optimal_angle = -weighted_angle
+        
+        if verbose:
+            print(f"  基於垂直線條計算，等效水平角度: {weighted_angle:.2f}°")
+            
+    else:
+        # 使用所有線條的加權平均
+        weighted_angle = np.average(angles, weights=lengths)
+        optimal_angle = -weighted_angle
+        
+        if verbose:
+            print(f"  使用所有線條計算，加權平均角度: {weighted_angle:.2f}°")
+    
+    if verbose:
+        print(f"  檢測完成，建議修正角度: {optimal_angle:.2f}°")
+    
+    return optimal_angle
+
+
+def apply_angle_correction(image: np.ndarray, angle: float, verbose: bool = False) -> np.ndarray:
+    """
+    應用角度修正
+    
+    Args:
+        image: 輸入圖像
+        angle: 修正角度（度）
+        verbose: 是否顯示詳細輸出
+        
+    Returns:
+        修正後的圖像
+    """
+    if verbose:
+        print(f"  應用角度修正: {angle:.2f}°")
+    
+    # 獲取圖像中心
+    height, width = image.shape[:2]
+    center = (width // 2, height // 2)
+    
+    # 創建旋轉矩陣
+    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+    
+    # 應用旋轉
+    rotated = cv2.warpAffine(image, rotation_matrix, (width, height), 
+                            flags=cv2.INTER_LINEAR, 
+                            borderMode=cv2.BORDER_CONSTANT,
+                            borderValue=(255, 255, 255))
+    
+    if verbose:
+        print(f"  角度修正完成")
+    
+    return rotated
+
+
 def detect_and_fill_text_regions(image: np.ndarray) -> np.ndarray:
     """
     檢測文字密集區域並填黑，以突顯文字走向
@@ -62,6 +205,45 @@ def detect_and_fill_text_regions(image: np.ndarray) -> np.ndarray:
     result[text_mask == 255] = 0
     
     return result
+
+
+def preprocess_image_for_line_detection(gray_image: np.ndarray) -> np.ndarray:
+    """
+    專門為線條檢測優化的圖像預處理
+    
+    Args:
+        gray_image: 輸入的灰階圖像
+        
+    Returns:
+        處理後適合線條檢測的圖像
+    """
+    # 添加強化模糊處理以減少雜訊
+    print("  應用強化模糊...")
+    blurred = cv2.GaussianBlur(gray_image, (35, 35), 10.0)
+    print(f"  模糊參數: kernel_size=(35,35), sigma=10.0 (強化模糊)")
+    
+    # 添加強化銳化處理以增強邊緣
+    print("  應用強化銳化處理以增強邊緣...")
+    kernel_sharpen = np.array([[-2, -2, -2],
+                              [-2, 17, -2],
+                              [-2, -2, -2]])
+    sharpened = cv2.filter2D(blurred, -1, kernel_sharpen)
+    
+    # 再次應用更強的銳化
+    kernel_sharpen2 = np.array([[-1, -1, -1, -1, -1],
+                               [-1, -1, -1, -1, -1],
+                               [-1, -1, 25, -1, -1],
+                               [-1, -1, -1, -1, -1],
+                               [-1, -1, -1, -1, -1]])
+    sharpened = cv2.filter2D(sharpened, -1, kernel_sharpen2)
+    print(f"  銳化核心: 3x3 強化核心 + 5x5 超強核心")
+    
+    # 文字密集區域檢測和填黑處理
+    print("  檢測文字密集區域並填黑...")
+    text_filled = detect_and_fill_text_regions(sharpened)
+    print(f"  文字區域填黑完成")
+    
+    return text_filled
 
 
 def detect_angle_by_lines(image: np.ndarray, verbose: bool = False) -> Tuple[int, float]:
@@ -145,7 +327,8 @@ def detect_angle_by_lines(image: np.ndarray, verbose: bool = False) -> Tuple[int
     return best_angle, confidence
 
 
-def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: Optional[float] = None, min_line_length: int = 50) -> np.ndarray:
+
+def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: Optional[float] = None, min_line_length: int = 50, skip_preprocessing: bool = False) -> np.ndarray:
     """
     可視化霍夫直線檢測結果，用紅色標記檢測到的線條
     並統計每條線與水平線的角度
@@ -155,56 +338,29 @@ def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: 
         output_path: 輸出路徑
         degree_limit: 角度限制（例如 10 表示只顯示 ±10° 內的線條），None 表示顯示全部
         min_line_length: 最小線條長度（像素），用於過濾短線條
+        skip_preprocessing: 是否跳過圖像預處理（當圖像已經預處理過時使用）
     """
     result = image.copy()
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
     
-    # 添加強化模糊處理以減少雜訊
-    print("  應用強化模糊...")
-    blurred = cv2.GaussianBlur(gray, (35, 35), 10.0)
-    print(f"  模糊參數: kernel_size=(35,35), sigma=10.0 (強化模糊)")
-    
-    # 添加強化銳化處理以增強邊緣
-    print("  應用強化銳化處理以增強邊緣...")
-    kernel_sharpen = np.array([[-2, -2, -2],
-                              [-2, 17, -2],
-                              [-2, -2, -2]])
-    sharpened = cv2.filter2D(blurred, -1, kernel_sharpen)
-    
-    # 再次應用更強的銳化
-    kernel_sharpen2 = np.array([[-1, -1, -1, -1, -1],
-                               [-1, -1, -1, -1, -1],
-                               [-1, -1, 25, -1, -1],
-                               [-1, -1, -1, -1, -1],
-                               [-1, -1, -1, -1, -1]])
-    sharpened = cv2.filter2D(sharpened, -1, kernel_sharpen2)
-    print(f"  銳化核心: 3x3 強化核心 + 5x5 超強核心")
-    
-    # 文字密集區域檢測和填黑處理
-    print("  檢測文字密集區域並填黑...")
-    text_filled = detect_and_fill_text_regions(sharpened)
-    print(f"  文字區域填黑完成")
-    
-    # 儲存處理過程的圖像
-    if output_path:
-        blurred_path = output_path.replace('.', '_blurred.')
-        cv2.imwrite(blurred_path, blurred)
-        print(f"  模糊圖像已儲存至: {blurred_path}")
+    if skip_preprocessing:
+        print("  跳過重複的圖像預處理，直接進行線條檢測...")
+        # 直接使用輸入圖像進行線條檢測
+        text_filled = gray
+    else:
+        # 使用專用的線條檢測預處理
+        text_filled = preprocess_image_for_line_detection(gray)
         
-        # 儲存銳化後的圖像
-        sharpened_path = output_path.replace('.', '_sharpened.')
-        cv2.imwrite(sharpened_path, sharpened)
-        print(f"  銳化圖像已儲存至: {sharpened_path}")
+        # 儲存測試結果
+        if output_path:
+            test_result_path = output_path.replace('.', '_result_test.')
+            cv2.imwrite(test_result_path, text_filled)
+            print(f"  線條檢測預處理結果已儲存至: {test_result_path}")
         
-        # 儲存文字填黑後的圖像
-        text_filled_path = output_path.replace('.', '_text_filled.')
-        cv2.imwrite(text_filled_path, text_filled)
-        print(f"  文字填黑圖像已儲存至: {text_filled_path}")
-    
-    # 邊緣檢測（使用文字填黑後的圖像）
+    # 邊緣檢測（使用預處理後的圖像）
     edges = cv2.Canny(text_filled, 30, 100, apertureSize=3)
     print(f"  Canny 邊緣檢測參數: low_threshold=30, high_threshold=100 (高敏感度)")
-    
+        
     # 霍夫直線檢測（提高敏感度）
     lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=100, maxLineGap=20)
     print(f"  霍夫變換參數: threshold=50, minLineLength=30, maxLineGap=20 (高敏感度)")
@@ -365,256 +521,6 @@ def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: 
         return result, None
 
 
-def detect_blank_separators(image: np.ndarray, angle: float, output_path: str = None, 
-                           angle_tolerance: float = 5.0, 
-                           scan_step: int = 5,
-                           min_blank_length: int = 30,
-                           white_threshold: int = 240) -> np.ndarray:
-    """
-    沿著指定角度方向掃描文件，找出連續的空白分隔線
-    
-    Args:
-        image: 輸入圖像
-        angle: 掃描方向的角度（與水平線的角度）
-        output_path: 輸出路徑
-        angle_tolerance: 角度容差（±度）
-        scan_step: 掃描間隔（像素）
-        min_blank_length: 最小連續空白長度（像素）
-        white_threshold: 白色閾值（灰度值）
-    
-    Returns:
-        標記了空白分隔線的圖像
-    """
-    print(f"\n=== 空白分隔線檢測 ===")
-    print(f"  掃描角度: {angle:.2f}°")
-    print(f"  掃描間隔: {scan_step} 像素")
-    print(f"  最小空白長度: {min_blank_length} 像素")
-    print(f"  白色閾值: {white_threshold}")
-    
-    result = image.copy()  # 用於繪製掃描線（紅色）+ 空白線（綠色）
-    result_clean = image.copy()  # 用於只繪製空白線（綠色）
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
-    h, w = gray.shape
-    
-    blank_regions = []
-    
-    # 統一使用 Bresenham 算法處理所有角度
-    print(f"  掃描方向: 沿 {angle:.1f}° 角度直接掃描")
-    
-    # 計算掃描線的方向向量
-    angle_rad = np.radians(angle)
-    dx = np.cos(angle_rad)
-    dy = np.sin(angle_rad)
-    
-    # 垂直於掃描線的方向（用於在垂直方向上移動掃描線）
-    perp_dx = -dy
-    perp_dy = dx
-    
-    # 計算需要掃描的範圍
-    # 沿著垂直於線條的方向掃描
-    diag = int(np.sqrt(w*w + h*h))  # 對角線長度
-    
-    # 從圖像中心開始，向兩側掃描
-    center_x = w / 2
-    center_y = h / 2
-    
-    scanned_lines = []
-    row_white_ratios = []
-    
-    # 沿垂直方向掃描
-    for offset in range(-diag, diag, scan_step):
-        # 掃描線的中心點
-        scan_center_x = center_x + offset * perp_dx
-        scan_center_y = center_y + offset * perp_dy
-        
-        # 計算掃描線的起點和終點
-        line_start_x = int(scan_center_x - diag * dx)
-        line_start_y = int(scan_center_y - diag * dy)
-        line_end_x = int(scan_center_x + diag * dx)
-        line_end_y = int(scan_center_y + diag * dy)
-        
-        # 使用 Bresenham 算法獲取掃描線上的像素
-        points = []
-        x0, y0 = line_start_x, line_start_y
-        x1, y1 = line_end_x, line_end_y
-        
-        # Bresenham's line algorithm
-        dx_line = abs(x1 - x0)
-        dy_line = abs(y1 - y0)
-        sx = 1 if x0 < x1 else -1
-        sy = 1 if y0 < y1 else -1
-        err = dx_line - dy_line
-        
-        x, y = x0, y0
-        while True:
-            if 0 <= x < w and 0 <= y < h:
-                points.append((x, y))
-            
-            if x == x1 and y == y1:
-                break
-                
-            e2 = 2 * err
-            if e2 > -dy_line:
-                err -= dy_line
-                x += sx
-            if e2 < dx_line:
-                err += dx_line
-                y += sy
-        
-        if len(points) > 0:
-            # 記錄掃描線用於繪製
-            if len(points) >= 2:
-                start_pt = points[0]
-                end_pt = points[-1]
-                scanned_lines.append({
-                    'x1': start_pt[0], 'y1': start_pt[1],
-                    'x2': end_pt[0], 'y2': end_pt[1],
-                    'offset': offset,
-                    'points': points  # 保存所有像素點
-                })
-    
-    print(f"  完成 {len(scanned_lines)} 條掃描線")
-    
-    # 在每條掃描線上找連續的空白區段
-    print(f"  在每條掃描線上尋找連續空白區段...")
-    print(f"  白色閾值: {white_threshold}")
-    
-    # 計算整體灰度統計
-    overall_mean = np.mean(gray)
-    overall_std = np.std(gray)
-    print(f"  圖片灰度: 平均={overall_mean:.1f}, 標準差={overall_std:.1f}")
-    
-    # 如果圖片整體很白且對比度低，使用相對檢測
-    use_relative = (overall_mean > 240 and overall_std < 30)
-    if use_relative:
-        print(f"  使用相對空白檢測模式（尋找比掃描線平均值更白的區域）")
-    
-    filtered_by_dark_pixels = 0  # 統計被過濾掉的區段數
-    total_white_pixels = 0  # 統計所有白色點總數
-    total_scanned_pixels = 0  # 統計所有掃描到的點總數
-    
-    for scan_line in scanned_lines:
-        points = scan_line['points']
-        if len(points) == 0:
-            continue
-        
-        # 獲取這條掃描線上的所有像素值
-        pixel_values = [gray[y, x] for x, y in points]
-        
-        # 統計總點數和白色點數
-        total_scanned_pixels += len(pixel_values)
-        white_pixels_in_line = sum(1 for pv in pixel_values if pv >= white_threshold)
-        total_white_pixels += white_pixels_in_line
-        
-        # 檢查整條線是否都沒有黑點（所有像素都 >= 220）
-        min_pixel = min(pixel_values)
-        
-        if min_pixel < 220:
-            # 這條線上有黑點（文字），跳過
-            filtered_by_dark_pixels += 1
-            continue
-        
-        # 這條線完全乾淨，記錄為空白區域
-        if len(points) >= 2:
-            start_pt = points[0]
-            end_pt = points[-1]
-            segment_length = int(np.sqrt((end_pt[0]-start_pt[0])**2 + 
-                                         (end_pt[1]-start_pt[1])**2))
-            
-            blank_regions.append({
-                'type': 'angled',
-                'angle': angle,
-                'x1': start_pt[0],
-                'y1': start_pt[1],
-                'x2': end_pt[0],
-                'y2': end_pt[1],
-                'length': segment_length
-            })
-    
-    print(f"  找到 {len(blank_regions)} 個空白區段")
-    print(f"  過濾掉 {filtered_by_dark_pixels} 個有黑點的掃描線")
-    
-    # 調試：統計空白區段的 Y 坐標分布
-    if len(blank_regions) > 0:
-        y_coords = []
-        for blank in blank_regions:
-            y_coords.append(blank['y1'])
-            y_coords.append(blank['y2'])
-        y_coords = np.array(y_coords)
-        print(f"  空白區段 Y 坐標範圍: {y_coords.min()} - {y_coords.max()}")
-        print(f"  Y > 300 的區段數: {np.sum(y_coords > 300)}/{len(y_coords)}")
-    
-    # 先建立只有綠線的版本
-    result_clean = image.copy()
-    
-    # 繪製掃描過的線（紅色）- 在原圖上
-    print(f"  繪製 {len(scanned_lines)} 條掃描線（紅色標記）")
-    for scan_line in scanned_lines:
-        cv2.line(result, 
-                (scan_line['x1'], scan_line['y1']), 
-                (scan_line['x2'], scan_line['y2']), 
-                (0, 0, 255), 2)  # 紅色，粗線（改為2像素）
-    
-    # 繪製檢測到的空白線
-    print(f"\n  檢測到 {len(blank_regions)} 個空白分隔區域")
-    
-    # 繪製所有空白區域（都是 angled 類型）
-    for idx, blank in enumerate(blank_regions, 1):
-        # 空白線用綠色標記（在兩個版本上都畫）
-        cv2.line(result, 
-                (blank['x1'], blank['y1']), 
-                (blank['x2'], blank['y2']), 
-                (0, 255, 0), 2)
-        cv2.line(result_clean, 
-                (blank['x1'], blank['y1']), 
-                (blank['x2'], blank['y2']), 
-                (0, 255, 0), 2)
-        if idx <= 20:  # 只打印前20條
-            print(f"  {idx}. 空白區 ({blank['angle']:.1f}°) from ({blank['x1']},{blank['y1']}) to ({blank['x2']},{blank['y2']}), 長度={blank['length']}px")
-    
-    if len(blank_regions) > 20:
-        print(f"  ... (省略剩餘 {len(blank_regions)-20} 個的打印輸出)")
-    
-    # 儲存兩個版本的結果
-    if output_path:
-        # 版本1: 只有綠色空白線
-        blank_path_clean = output_path.replace('.', '_blanks.')
-        cv2.imwrite(blank_path_clean, result_clean)
-        print(f"\n  空白分隔線（純淨版）已儲存至: {blank_path_clean}")
-        
-        # 版本2: 紅色掃描線 + 綠色空白線
-        blank_path_full = output_path.replace('.', '_blanks_with_scans.')
-        cv2.imwrite(blank_path_full, result)
-        print(f"  空白分隔線（含掃描線）已儲存至: {blank_path_full}")
-    
-    # 輸出統計摘要
-    line_detection_rate = (len(blank_regions) / len(scanned_lines) * 100) if len(scanned_lines) > 0 else 0
-    white_pixel_rate = (total_white_pixels / total_scanned_pixels * 100) if total_scanned_pixels > 0 else 0
-    
-    print(f"\n=== 空白檢測統計 ===")
-    print(f"  掃描線總數: {len(scanned_lines)} 條")
-    print(f"  檢測到的空白線: {len(blank_regions)} 條")
-    print(f"  過濾掉的線（有黑點）: {filtered_by_dark_pixels} 條")
-    print(f"  空白線檢出率: {line_detection_rate:.2f}% (空白線數/掃描線數)")
-    print(f"  掃描角度: {angle:.1f}°")
-    print(f"  掃描間隔: {scan_step} 像素")
-    print(f"  白色閾值: {white_threshold}")
-    print(f"  掃描總點數: {total_scanned_pixels:,} 點")
-    print(f"  白色點總數: {total_white_pixels:,} 點")
-    print(f"  白色點檢出率: {white_pixel_rate:.2f}% (白色點數/掃描點數)")
-    
-    # 返回統計數據
-    return {
-        'scan_lines': len(scanned_lines),
-        'detected_blanks': len(blank_regions),
-        'filtered_lines': filtered_by_dark_pixels,
-        'line_rate': line_detection_rate,
-        'total_pixels': total_scanned_pixels,
-        'white_pixels': total_white_pixels,
-        'white_rate': white_pixel_rate,
-        'angle': angle
-    }
-
 
 def rotate_image(image: np.ndarray, angle: float) -> np.ndarray:
     """旋轉圖像"""
@@ -670,21 +576,15 @@ def auto_rotate_by_content(image: np.ndarray, verbose: bool = False) -> Tuple[np
     return rotated, rotation_angle
 
 
-def preprocess_image(image: np.ndarray, enable_rotation: bool = True, verbose: bool = False) -> Tuple[np.ndarray, int]:
+def preprocess_image(image: np.ndarray, verbose: bool = False) -> np.ndarray:
     """
-    完整的圖像預處理流程
+    完整的圖像預處理流程（不包含旋轉）
     
     返回:
-        processed_image: 處理後的圖像
-        rotation_angle: 旋轉的角度
+        processed_image: 處理後的灰階圖像
     """
-    rotation_angle = 0
-    
-    # 1. 自動旋轉
-    if enable_rotation:
-        image, rotation_angle = auto_rotate_by_content(image, verbose)
-    
-    # 2. 降噪
+
+    # 1. 降噪
     if verbose:
         print("\n=== 圖像增強 ===")
         print("  應用降噪...")
@@ -707,28 +607,20 @@ def preprocess_image(image: np.ndarray, enable_rotation: bool = True, verbose: b
                       [-1, -1, -1]])
     sharpened = cv2.filter2D(enhanced, -1, kernel)
     
-    # 轉回彩色以便後續處理
-    result = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
+    # 保持灰階格式，不轉回彩色
+    result = sharpened
     
     if verbose:
         print("\n預處理完成！")
     
-    return result, rotation_angle
+    return result
 
 
 def main():
     parser = argparse.ArgumentParser(description='霍夫直線檢測預處理工具')
     parser.add_argument('--input', '-i', required=True, help='輸入圖像路徑')
     parser.add_argument('--output', '-o', required=True, help='輸出圖像路徑')
-    parser.add_argument('--show-lines', action='store_true', help='顯示檢測到的線條（紅色標記）')
-    parser.add_argument('--degree', type=float, help='限定畫出紅線的角度範圍（例如：--degree 10 只畫出 ±10° 內的線條）')
-    parser.add_argument('--detect-blanks', action='store_true', help='檢測空白分隔線（綠色標記）')
-    parser.add_argument('--scan-angle', type=float, help='直接指定空白掃描角度（例如：20 表示 20°），若未指定則使用霍夫檢測的角度')
-    parser.add_argument('--angle-offset', type=float, help='測試角度偏移（例如：5 會測試 偵測角度-5°、偵測角度、偵測角度+5° 三個角度並比對）')
-    parser.add_argument('--scan-step', type=int, default=5, help='空白掃描間隔（像素，預設：5）')
-    parser.add_argument('--min-blank', type=int, default=30, help='最小空白長度（像素，預設：30）')
-    parser.add_argument('--white-threshold', type=int, default=240, help='白色閾值（0-255，預設：240）')
-    parser.add_argument('--no-rotation', action='store_true', help='停用自動旋轉')
+    parser.add_argument('--fill_text', action='store_true', help='使用專門的線條檢測預處理（文字區域填黑）')
     parser.add_argument('--verbose', '-v', action='store_true', help='顯示詳細輸出')
     
     args = parser.parse_args()
@@ -747,111 +639,20 @@ def main():
         print(f"讀取圖像: {args.input}")
         print(f"圖像尺寸: {image.shape[1]}x{image.shape[0]}")
     
-    # 線條可視化模式
-    if args.show_lines:
-        print("\n=== 線條檢測可視化 ===")
-        if args.degree is not None:
-            print(f"  角度過濾: ±{args.degree}°")
-        result, most_common_angle = visualize_line_detection(image, args.output, degree_limit=args.degree)
-        
-        # 顯示最終輸出角度
-        if most_common_angle is not None:
-            print(f"\n✓ 最終輸出角度: {most_common_angle:.2f}° (長度加權最優角度)")
-        
-        # 如果啟用空白檢測
-        if args.detect_blanks:
-            # 使用指定角度或霍夫檢測的角度
-            if args.scan_angle is not None:
-                base_angle = args.scan_angle
-                print(f"\n使用指定角度 {base_angle:.2f}° 作為基準...")
-            elif most_common_angle is not None:
-                base_angle = most_common_angle
-                print(f"\n使用最多出現的角度 {base_angle:.2f}° 作為基準...")
-            else:
-                print("\n警告: 未檢測到角度且未指定掃描角度，跳過空白檢測")
-                return
-            
-            # 如果指定了角度偏移，測試三個角度並比對
-            if args.angle_offset is not None:
-                offset = args.angle_offset
-                test_angles = [
-                    (base_angle - offset, f"{base_angle - offset:.1f}° (-{offset}°)"),
-                    (base_angle, f"{base_angle:.1f}° (基準)"),
-                    (base_angle + offset, f"{base_angle + offset:.1f}° (+{offset}°)")
-                ]
-                
-                print(f"\n{'='*70}")
-                print(f"三角度比對測試 (偏移 ±{offset}°)")
-                print(f"{'='*70}")
-                
-                results = []
-                for angle, label in test_angles:
-                    print(f"\n--- 測試 {label} ---")
-                    output_path = args.output.replace('.', f'_{angle:.1f}deg.')
-                    
-                    stats = detect_blank_separators(
-                        image, 
-                        angle, 
-                        output_path,
-                        angle_tolerance=5.0,
-                        scan_step=args.scan_step,
-                        min_blank_length=args.min_blank,
-                        white_threshold=args.white_threshold
-                    )
-                    
-                    # 記錄結果和統計數據
-                    results.append((angle, label, stats))
-                
-                # 顯示比對結果
-                print(f"\n{'='*70}")
-                print(f"三角度比對結果")
-                print(f"{'='*70}")
-                
-                # 找出空白線檢出率最高的角度
-                best_idx = max(range(len(results)), key=lambda i: results[i][2]['detected_blanks'])
-                
-                # 顯示數據比較表格
-                print(f"\n角度         掃描線   空白線   空白率     白色點數     白色率")
-                print(f"{'─'*70}")
-                for idx, (angle, label, stats) in enumerate(results):
-                    marker = ' ✅' if idx == best_idx else '   '
-                    print(f"{angle:5.1f}° {marker}  {stats['scan_lines']:6,}   "
-                          f"{stats['detected_blanks']:6}   {stats['line_rate']:5.2f}%   "
-                          f"{stats['white_pixels']:10,}   {stats['white_rate']:5.2f}%")
-                
-                best_angle, best_label, best_stats = results[best_idx]
-                print(f"\n最佳角度: {best_angle:.1f}° ({best_stats['detected_blanks']} 條空白線)")
-                
-                print(f"\n已生成三個輸出檔案:")
-                for angle, label, _ in results:
-                    output_name = args.output.replace('.', f'_{angle:.1f}deg.')
-                    print(f"  {label}: {output_name}")
-                print(f"\n請查看輸出圖片比較檢測效果")
-                
-            else:
-                # 單一角度檢測
-                print(f"\n使用角度 {base_angle:.2f}° 進行空白檢測...")
-                detect_blank_separators(
-                    image, 
-                    base_angle, 
-                    args.output,
-                    angle_tolerance=5.0,
-                    scan_step=args.scan_step,
-                    min_blank_length=args.min_blank,
-                    white_threshold=args.white_threshold
-                )
-        
-        # show_lines 模式下只儲存線條檢測結果，不進行旋轉
-        cv2.imwrite(args.output, result)
-        print(f"已儲存至: {args.output}")
-        return
-    
     # 預處理
-    processed, rotation_angle = preprocess_image(
-        image, 
-        enable_rotation=not args.no_rotation,
-        verbose=args.verbose
-    )
+    if args.fill_text:
+        # 使用專門的線條檢測預處理
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        processed = preprocess_image_for_line_detection(gray)
+        
+        # 儲存測試結果
+        test_result_path = args.output.replace('.', '_result_test.')
+        cv2.imwrite(test_result_path, processed)
+        if args.verbose:
+            print(f"  線條檢測預處理結果已儲存至: {test_result_path}")
+    else:
+        # 使用一般預處理
+        processed = preprocess_image(image, verbose=args.verbose)
     
     # 儲存結果
     cv2.imwrite(args.output, processed)
