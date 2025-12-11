@@ -440,13 +440,13 @@ def main():
     processed_with_text_fill = detect_and_fill_text_regions(processed)
     
     # detect_angle_by_lines 
-    rotation_angle, confidence = detect_angle_by_lines(processed_with_text_fill, verbose=args.verbose)
-    if rotation_angle != 0:
+    result_image, rotation_angle = detect_angle_by_lines(processed_with_text_fill)
+    if rotation_angle is not None and rotation_angle != 0:
         if args.verbose:
-            print(f"旋轉角度: {rotation_angle}°，置信度: {confidence:.2f}")
-        rotated_image = rotate_image(processed, rotation_angle)
+            print(f"旋轉角度: {rotation_angle}°")
+        rotated_image = rotate_image(gray, rotation_angle)
     else:
-        rotated_image = processed
+        rotated_image = gray
      
     # 儲存結果
     cv2.imwrite(args.output, rotated_image)

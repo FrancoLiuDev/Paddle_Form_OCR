@@ -3,11 +3,12 @@
 """
 霍夫線條檢測功能測試腳本
 
+
 此腳本包含所有相關函數的測試功能，包括：
 - preprocess_image_for_line_detection: 專門的線條檢測預處理
 - detect_and_fill_text_regions: 文字區域檢測和填黑
 - apply_angle_correction: 角度修正
-- visualize_line_detection: 線條檢測可視化
+- detect_angle_by_lines: 線條偵測與可視化
 
 作者: GitHub Copilot
 日期: 2025-12-11
@@ -25,7 +26,7 @@ from preprocess_hough import (
     preprocess_image_for_line_detection,
     detect_and_fill_text_regions,
     apply_angle_correction,
-    visualize_line_detection,
+    detect_angle_by_lines,
     preprocess_image
 )
 
@@ -173,49 +174,39 @@ class FunctionTester:
         
         return output_path
     
-    def test_line_visualization(self, image_path: str, degree_limit: Optional[float] = None, verbose: bool = True) -> str:
+    def test_detect_angle_by_lines(self, image_path: str, degree_limit: Optional[float] = None, verbose: bool = True) -> str:
         """
-        測試線條檢測可視化功能
-        
+        測試 detect_angle_by_lines 線條偵測與可視化功能
         Args:
             image_path: 輸入圖像路徑
             degree_limit: 角度限制（±度數）
             verbose: 是否顯示詳細輸出
-            
         Returns:
             輸出檔案路徑
         """
         print("\n" + "="*50)
-        print("測試: visualize_line_detection")
+        print("測試: detect_angle_by_lines")
         print("="*50)
-        
         # 讀取圖像
         image = cv2.imread(image_path)
         if image is None:
             raise FileNotFoundError(f"無法讀取圖像: {image_path}")
-        
         if verbose:
             print(f"輸入圖像: {image_path}")
             print(f"圖像尺寸: {image.shape[1]}x{image.shape[0]}")
             if degree_limit:
                 print(f"角度限制: ±{degree_limit}°")
-        
         # 設定輸出路徑
         basename = os.path.splitext(os.path.basename(image_path))[0]
         if degree_limit:
             output_path = os.path.join(self.output_dir, f"{basename}_lines_{degree_limit}deg.png")
         else:
             output_path = os.path.join(self.output_dir, f"{basename}_lines_all.png")
-        
-        # 執行線條可視化
-        result, angle = visualize_line_detection(image, output_path, degree_limit=degree_limit)
-        
-        # 手動儲存可視化結果
+        # 執行線條偵測與可視化
+        result, angle = detect_angle_by_lines(image, degree_limit=degree_limit)
         cv2.imwrite(output_path, result)
-        
         if verbose:
             print(f"結果已儲存: {output_path}")
-        
         return output_path
     
     def test_complete_pipeline(self, image_path: str, verbose: bool = True) -> dict:
@@ -249,10 +240,10 @@ class FunctionTester:
         results['corrected'] = self.test_angle_correction(image_path, angle, verbose)
         
         # 5. 線條可視化（全部線條）
-        results['lines_all'] = self.test_line_visualization(image_path, None, verbose)
+        results['lines_all'] = self.test_detect_angle_by_lines(image_path, None, verbose)
         
         # 6. 線條可視化（10度限制）
-        results['lines_10deg'] = self.test_line_visualization(image_path, 10.0, verbose)
+        results['lines_10deg'] = self.test_detect_angle_by_lines(image_path, 10.0, verbose)
         
         if verbose:
             print("\n" + "="*60)
@@ -300,7 +291,7 @@ def main():
         elif args.test == 'angle_correction':
             tester.test_angle_correction(args.input, args.angle, args.verbose)
         elif args.test == 'line_visualization':
-            tester.test_line_visualization(args.input, args.degree_limit, args.verbose)
+            tester.test_detect_angle_by_lines(args.input, args.degree_limit, args.verbose)
         
         print(f"\n測試完成！結果已儲存至 {args.output_dir}/")
         return 0
