@@ -140,28 +140,20 @@ def preprocess_image_for_line_detection(gray_image: np.ndarray) -> np.ndarray:
 
 
 
-def detect_angle_by_lines(image: np.ndarray, output_path: str, degree_limit: Optional[float] = None, min_line_length: int = 50, skip_preprocessing: bool = False) -> np.ndarray:
+def detect_angle_by_lines(image: np.ndarray, degree_limit: Optional[float] = 30, min_line_length: int = 50) -> np.ndarray:
     """
     可視化霍夫直線檢測結果，用紅色標記檢測到的線條
     並統計每條線與水平線的角度
     
     Args:
         image: 輸入圖像
-        output_path: 輸出路徑
         degree_limit: 角度限制（例如 10 表示只顯示 ±10° 內的線條），None 表示顯示全部
         min_line_length: 最小線條長度（像素），用於過濾短線條
-        skip_preprocessing: 是否跳過圖像預處理（當圖像已經預處理過時使用）
     """
     result = image.copy()
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
-    
-    if skip_preprocessing:
-        print("  跳過重複的圖像預處理，直接進行線條檢測...")
-        # 直接使用輸入圖像進行線條檢測
-        text_filled = gray
-    else:
-        # 使用專用的線條檢測預處理
-        text_filled = preprocess_image_for_line_detection(gray)
+    # 使用專用的線條檢測預處理
+    text_filled = preprocess_image_for_line_detection(gray)
         
     # 邊緣檢測（使用預處理後的圖像）
     edges = cv2.Canny(text_filled, 30, 100, apertureSize=3)
@@ -314,11 +306,7 @@ def detect_angle_by_lines(image: np.ndarray, output_path: str, degree_limit: Opt
         print("  未檢測到線條")
     
     # 可選：儲存可視化結果圖片（透過環境變數 SAVE_LINES_IMAGE=1 啟用）
-    import os
-    if output_path and os.environ.get('SAVE_LINES_IMAGE', '0') == '1':
-        vis_path = output_path.replace('.', '_lines.')
-        cv2.imwrite(vis_path, result)
-        print(f"\n  線條可視化已儲存至: {vis_path}")
+    # (output_path 已移除，如需可視化請在主程式層處理)
     
     # 返回結果和最常見的角度
     if len(filtered_lines) > 0:
