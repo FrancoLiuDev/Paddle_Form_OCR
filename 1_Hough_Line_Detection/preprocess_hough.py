@@ -172,10 +172,10 @@ def detect_and_fill_text_regions(image: np.ndarray) -> np.ndarray:
                                    cv2.THRESH_BINARY_INV, 11, 2)
     
     # 2. 使用更小的形態學操作連接文字，避免過度填充
-    # 水平方向的核心，用於連接文字行（縮小尺寸）
-    kernel_horizontal = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 1))
-    # 垂直方向的核心，用於連接文字列（縮小尺寸）
-    kernel_vertical = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 8))
+    # 水平方向的核心，用於連接文字行（進一步減小，讓文字行更細）
+    kernel_horizontal = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 1))
+    # 垂直方向的核心，用於連接文字列（保持原有尺寸）
+    kernel_vertical = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 4))
     
     # 3. 較溫和的膨脹操作連接文字
     dilated_h = cv2.dilate(binary, kernel_horizontal, iterations=1)
@@ -184,15 +184,15 @@ def detect_and_fill_text_regions(image: np.ndarray) -> np.ndarray:
     # 4. 合併水平和垂直方向的結果
     combined = cv2.bitwise_or(dilated_h, dilated_v)
     
-    # 5. 輕微膨脹以填滿文字區域（減少填充強度）
-    kernel_fill = cv2.getStructuringElement(cv2.MORPH_RECT, (8, 8))
+    # 5. 輕微膨脹以填滿文字區域（使用更細的核心讓文字行更細）
+    kernel_fill = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 2))
     filled = cv2.dilate(combined, kernel_fill, iterations=1)
     
     # 6. 使用輪廓檢測找到文字區域
     contours, _ = cv2.findContours(filled, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    # 7. 提高面積閾值，只保留真正密集的文字區域
-    min_area = 1500  # 提高最小區域面積
+    # 7. 進一步提高面積闾值，只保留真正的文字行
+    min_area = 2000  # 適度降低闾值，保留文字行但保持細節
     text_mask = np.zeros_like(image)
     
     for contour in contours:
@@ -217,10 +217,10 @@ def preprocess_image_for_line_detection(gray_image: np.ndarray) -> np.ndarray:
     Returns:
         處理後適合線條檢測的圖像
     """
-    # 添加強化模糊處理以減少雜訊
-    print("  應用強化模糊...")
-    blurred = cv2.GaussianBlur(gray_image, (35, 35), 10.0)
-    print(f"  模糊參數: kernel_size=(35,35), sigma=10.0 (強化模糊)")
+    # 添加適度模糊處理以減少雜訊（減少模糊強度讓文字更精確）
+    print("  應用適度模糊...")
+    blurred = cv2.GaussianBlur(gray_image, (15, 15), 3.0)
+    print(f"  模糊參數: kernel_size=(15,15), sigma=3.0 (適度模糊)")
     
     # 添加強化銳化處理以增強邊緣
     print("  應用強化銳化處理以增強邊緣...")

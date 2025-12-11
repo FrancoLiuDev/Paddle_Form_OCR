@@ -241,7 +241,10 @@ class FunctionTester:
             output_path = os.path.join(self.output_dir, f"{basename}_lines_all.png")
         
         # 執行線條可視化
-        result = visualize_line_detection(image, output_path, degree_limit=degree_limit)
+        result, angle = visualize_line_detection(image, output_path, degree_limit=degree_limit)
+        
+        # 手動儲存可視化結果
+        cv2.imwrite(output_path, result)
         
         if verbose:
             print(f"結果已儲存: {output_path}")
