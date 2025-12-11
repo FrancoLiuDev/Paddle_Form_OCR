@@ -14,3 +14,5 @@ fuji.png
 python3 preprocess_hough.py --input ../fuji.png --output result_compare.jpg --show-lines --detect-blanks --degree 30 --angle-offset 5 --scan-step 1 --white-threshold 199 --verbose
 
 python3 preprocess_hough.py --input ../images/page_005.png --output result.jpg --show-lines --auto-correct --degree 30 --verbose
+
+python preprocess_hough.py --input ../images/page_014.png --output result\page_014_preprocessed.png --verbose

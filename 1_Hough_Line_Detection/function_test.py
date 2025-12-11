@@ -6,7 +6,6 @@
 此腳本包含所有相關函數的測試功能，包括：
 - preprocess_image_for_line_detection: 專門的線條檢測預處理
 - detect_and_fill_text_regions: 文字區域檢測和填黑
-- detect_optimal_angle: 最佳角度檢測
 - apply_angle_correction: 角度修正
 - visualize_line_detection: 線條檢測可視化
 
@@ -25,7 +24,6 @@ from typing import Tuple, Optional
 from preprocess_hough import (
     preprocess_image_for_line_detection,
     detect_and_fill_text_regions,
-    detect_optimal_angle,
     apply_angle_correction,
     visualize_line_detection,
     preprocess_image
@@ -126,40 +124,7 @@ class FunctionTester:
         
         return output_path
     
-    def test_angle_detection(self, image_path: str, verbose: bool = True) -> Optional[float]:
-        """
-        測試角度檢測功能
-        
-        Args:
-            image_path: 輸入圖像路徑
-            verbose: 是否顯示詳細輸出
-            
-        Returns:
-            檢測到的角度（如果失敗則返回 None）
-        """
-        print("\n" + "="*50)
-        print("測試: detect_optimal_angle")
-        print("="*50)
-        
-        # 讀取圖像
-        image = cv2.imread(image_path)
-        if image is None:
-            raise FileNotFoundError(f"無法讀取圖像: {image_path}")
-        
-        if verbose:
-            print(f"輸入圖像: {image_path}")
-            print(f"圖像尺寸: {image.shape[1]}x{image.shape[0]}")
-        
-        # 檢測角度
-        angle = detect_optimal_angle(image, verbose=verbose)
-        
-        if verbose:
-            if angle is not None:
-                print(f"檢測結果: 角度={angle:.2f}°")
-            else:
-                print("檢測結果: 無法檢測到有效角度")
-        
-        return angle
+
     
     def test_angle_correction(self, image_path: str, angle: Optional[float] = None, verbose: bool = True) -> str:
         """
@@ -186,9 +151,11 @@ class FunctionTester:
             print(f"輸入圖像: {image_path}")
             print(f"圖像尺寸: {image.shape[1]}x{image.shape[0]}")
         
-        # 如果沒有指定角度，先檢測
+        # 如果沒有指定角度，需要手動指定
         if angle is None:
-            angle, _ = detect_optimal_angle(image, verbose=verbose)
+            if verbose:
+                print("警告: 未指定角度且 detect_optimal_angle 已移除，使用預設角度 0")
+            angle = 0.0
         
         if verbose:
             print(f"使用角度: {angle}°")
@@ -307,7 +274,7 @@ def main():
     parser.add_argument('--input', '-i', required=True, help='輸入圖像路徑')
     parser.add_argument('--output-dir', '-o', default='result_test', help='輸出目錄（預設：result_test）')
     parser.add_argument('--test', '-t', choices=[
-        'line_detection', 'text_filled', 'angle_detection', 
+        'line_detection', 'text_filled', 
         'angle_correction', 'line_visualization'
     ], required=True, help='要執行的測試類型（必須指定）')
     parser.add_argument('--angle', type=float, help='指定角度修正值（用於 angle_correction 測試）')
@@ -330,8 +297,6 @@ def main():
             tester.test_line_detection_preprocessing(args.input, args.verbose)
         elif args.test == 'text_filled':
             tester.test_text_region_filling(args.input, args.verbose)
-        elif args.test == 'angle_detection':
-            tester.test_angle_detection(args.input, args.verbose)
         elif args.test == 'angle_correction':
             tester.test_angle_correction(args.input, args.angle, args.verbose)
         elif args.test == 'line_visualization':

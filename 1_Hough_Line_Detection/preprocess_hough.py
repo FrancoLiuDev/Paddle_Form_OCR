@@ -12,114 +12,6 @@ import os
 from typing import Tuple, List, Optional
 
 
-def detect_optimal_angle(image: np.ndarray, verbose: bool = False) -> Optional[float]:
-    """
-    檢測圖像的最佳修正角度
-    
-    Args:
-        image: 輸入圖像
-        verbose: 是否顯示詳細輸出
-        
-    Returns:
-        最佳修正角度，如果檢測失敗則返回 None
-    """
-    if verbose:
-        print("  正在檢測最佳角度...")
-    
-    # 使用線條檢測獲取角度
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
-    
-    # 應用強化模糊
-    blurred = cv2.GaussianBlur(gray, (35, 35), 10.0)
-    
-    # 雙層銳化處理
-    kernel_sharpen1 = np.array([[-2, -2, -2], [-2, 17, -2], [-2, -2, -2]])
-    sharpened = cv2.filter2D(blurred, -1, kernel_sharpen1)
-    
-    kernel_sharpen2 = np.array([[-1, -1, -1, -1, -1], [-1, -1, -1, -1, -1], 
-                               [-1, -1, 25, -1, -1], [-1, -1, -1, -1, -1], [-1, -1, -1, -1, -1]])
-    sharpened = cv2.filter2D(sharpened, -1, kernel_sharpen2)
-    
-    # 文字區域填黑
-    text_filled = detect_and_fill_text_regions(sharpened)
-    
-    # 邊緣檢測
-    edges = cv2.Canny(text_filled, 30, 100, apertureSize=3)
-    
-    # 霍夫線檢測
-    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=100, maxLineGap=20)
-    
-    if lines is None or len(lines) < 5:
-        if verbose:
-            print("  檢測到的線條不足，無法確定角度")
-        return None
-    
-    # 計算所有線條角度
-    angles = []
-    lengths = []
-    
-    for line in lines:
-        x1, y1, x2, y2 = line[0]
-        angle = np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi
-        length = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
-        
-        if length >= 50:  # 只考慮長度足夠的線條
-            angles.append(angle)
-            lengths.append(length)
-    
-    if len(angles) < 3:
-        if verbose:
-            print("  有效線條不足，無法確定角度")
-        return None
-    
-    # 按長度加權計算最優角度
-    angles = np.array(angles)
-    lengths = np.array(lengths)
-    
-    # 擴大角度檢測範圍，處理更大傾斜
-    horizontal_mask = np.abs(angles) <= 45  # 擴大到 ±45°
-    vertical_mask = (np.abs(angles) >= 45) & (np.abs(angles) <= 135)
-    
-    if verbose:
-        print(f"  檢測到 {len(angles)} 條有效線條")
-        print(f"  水平方向線條: {np.sum(horizontal_mask)} 條")
-        print(f"  垂直方向線條: {np.sum(vertical_mask)} 條")
-    
-    if np.sum(horizontal_mask) >= np.sum(vertical_mask) and np.sum(horizontal_mask) > 0:
-        # 水平線條較多，計算平均角度
-        h_angles = angles[horizontal_mask]
-        h_weights = lengths[horizontal_mask]
-        weighted_angle = np.average(h_angles, weights=h_weights)
-        optimal_angle = -weighted_angle  # 負號表示反方向修正
-        
-        if verbose:
-            print(f"  基於水平線條計算，平均角度: {weighted_angle:.2f}°")
-            
-    elif np.sum(vertical_mask) > 0:
-        # 垂直線條較多，轉換為水平角度
-        v_angles = angles[vertical_mask]
-        # 將垂直角度轉為對應的水平修正角度
-        h_equivalent = np.where(v_angles > 0, v_angles - 90, v_angles + 90)
-        v_weights = lengths[vertical_mask]
-        weighted_angle = np.average(h_equivalent, weights=v_weights)
-        optimal_angle = -weighted_angle
-        
-        if verbose:
-            print(f"  基於垂直線條計算，等效水平角度: {weighted_angle:.2f}°")
-            
-    else:
-        # 使用所有線條的加權平均
-        weighted_angle = np.average(angles, weights=lengths)
-        optimal_angle = -weighted_angle
-        
-        if verbose:
-            print(f"  使用所有線條計算，加權平均角度: {weighted_angle:.2f}°")
-    
-    if verbose:
-        print(f"  檢測完成，建議修正角度: {optimal_angle:.2f}°")
-    
-    return optimal_angle
-
 
 def apply_angle_correction(image: np.ndarray, angle: float, verbose: bool = False) -> np.ndarray:
     """
@@ -636,8 +528,11 @@ def main():
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     processed = preprocess_image_for_line_detection(gray)
     
+    # 應用文字區域檢測和填黑處理
+    processed_with_text_fill = detect_and_fill_text_regions(processed)
+    
     # 儲存結果
-    cv2.imwrite(args.output, processed)
+    cv2.imwrite(args.output, processed_with_text_fill)
     
     if args.verbose:
         print(f"\n處理完成！")
