@@ -351,12 +351,6 @@ def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: 
         # 使用專用的線條檢測預處理
         text_filled = preprocess_image_for_line_detection(gray)
         
-        # 儲存測試結果
-        if output_path:
-            test_result_path = output_path.replace('.', '_result_test.')
-            cv2.imwrite(test_result_path, text_filled)
-            print(f"  線條檢測預處理結果已儲存至: {test_result_path}")
-        
     # 邊緣檢測（使用預處理後的圖像）
     edges = cv2.Canny(text_filled, 30, 100, apertureSize=3)
     print(f"  Canny 邊緣檢測參數: low_threshold=30, high_threshold=100 (高敏感度)")
@@ -620,7 +614,6 @@ def main():
     parser = argparse.ArgumentParser(description='霍夫直線檢測預處理工具')
     parser.add_argument('--input', '-i', required=True, help='輸入圖像路徑')
     parser.add_argument('--output', '-o', required=True, help='輸出圖像路徑')
-    parser.add_argument('--fill_text', action='store_true', help='使用專門的線條檢測預處理（文字區域填黑）')
     parser.add_argument('--verbose', '-v', action='store_true', help='顯示詳細輸出')
     
     args = parser.parse_args()
@@ -639,20 +632,9 @@ def main():
         print(f"讀取圖像: {args.input}")
         print(f"圖像尺寸: {image.shape[1]}x{image.shape[0]}")
     
-    # 預處理
-    if args.fill_text:
-        # 使用專門的線條檢測預處理
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-        processed = preprocess_image_for_line_detection(gray)
-        
-        # 儲存測試結果
-        test_result_path = args.output.replace('.', '_result_test.')
-        cv2.imwrite(test_result_path, processed)
-        if args.verbose:
-            print(f"  線條檢測預處理結果已儲存至: {test_result_path}")
-    else:
-        # 使用一般預處理
-        processed = preprocess_image(image, verbose=args.verbose)
+    # 預處理 - 總是使用專門的線條檢測預處理
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    processed = preprocess_image_for_line_detection(gray)
     
     # 儲存結果
     cv2.imwrite(args.output, processed)
