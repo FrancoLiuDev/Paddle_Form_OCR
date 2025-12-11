@@ -138,89 +138,9 @@ def preprocess_image_for_line_detection(gray_image: np.ndarray) -> np.ndarray:
     return text_filled
 
 
-def detect_angle_by_lines(image: np.ndarray, verbose: bool = False) -> Tuple[int, float]:
-    """
-    使用霍夫直線檢測來判斷圖像需要旋轉的角度
-    
-    返回:
-        rotation_angle: 需要旋轉的角度 (0, 90, 180, 270)
-        confidence: 置信度分數
-    """
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image.copy()
-    
-    # 添加模糊處理以減少雜訊
-    if verbose:
-        print("  應用適度模糊...")
-    blurred = cv2.GaussianBlur(gray, (21, 21), 9.0)
-    
-    # 邊緣檢測（高敏感度）
-    edges = cv2.Canny(blurred, 30, 100, apertureSize=3)
-    
-    # 霍夫直線檢測（高敏感度）
-    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=100, maxLineGap=20)
-    
-    if lines is None:
-        if verbose:
-            print("  未檢測到線條，返回 0° 旋轉")
-        return 0, 0.0
-    
-    # 統計各方向的線條數量
-    angle_counts = {
-        0: 0,    # 水平線
-        45: 0,   # 45度斜線
-        90: 0,   # 垂直線
-        135: 0   # 135度斜線
-    }
-    
-    for line in lines:
-        x1, y1, x2, y2 = line[0]
-        
-        # 計算線條角度
-        angle = np.abs(np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi)
-        
-        # 分類線條方向
-        if angle < 22.5 or angle > 157.5:
-            angle_counts[0] += 1
-        elif 22.5 <= angle < 67.5:
-            angle_counts[45] += 1
-        elif 67.5 <= angle < 112.5:
-            angle_counts[90] += 1
-        elif 112.5 <= angle < 157.5:
-            angle_counts[135] += 1
-    
-    if verbose:
-        print(f"  線條統計: 水平={angle_counts[0]}, 45°={angle_counts[45]}, " +
-              f"垂直={angle_counts[90]}, 135°={angle_counts[135]}")
-    
-    # 計算文字投影方差來輔助判斷
-    scores = {}
-    for test_angle in [0, 90, 180, 270]:
-        rotated = rotate_image(image.copy(), test_angle)
-        rotated_gray = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY) if len(rotated.shape) == 3 else rotated
-        
-        # 計算水平投影方差（文字行應該產生高方差）
-        horizontal_projection = np.sum(rotated_gray < 200, axis=1)
-        variance = np.var(horizontal_projection)
-        
-        # 結合線條數量和投影方差
-        line_score = angle_counts.get((test_angle % 180), 0)
-        scores[test_angle] = variance * (1 + line_score * 0.1)
-        
-        if verbose:
-            print(f"  角度 {test_angle}°: 投影方差={variance:.1f}, 線條加權分數={scores[test_angle]:.1f}")
-    
-    # 選擇分數最高的角度
-    best_angle = max(scores, key=scores.get)
-    confidence = scores[best_angle] / (sum(scores.values()) + 1e-6)
-    
-    if verbose:
-        print(f"  最佳旋轉角度: {best_angle}°, 置信度: {confidence:.2%}")
-    
-    return best_angle, confidence
 
 
-
-def visualize_line_detection(image: np.ndarray, output_path: str, degree_limit: Optional[float] = None, min_line_length: int = 50, skip_preprocessing: bool = False) -> np.ndarray:
+def detect_angle_by_lines(image: np.ndarray, output_path: str, degree_limit: Optional[float] = None, min_line_length: int = 50, skip_preprocessing: bool = False) -> np.ndarray:
     """
     可視化霍夫直線檢測結果，用紅色標記檢測到的線條
     並統計每條線與水平線的角度
@@ -531,8 +451,17 @@ def main():
     # 應用文字區域檢測和填黑處理
     processed_with_text_fill = detect_and_fill_text_regions(processed)
     
+    # detect_angle_by_lines 
+    rotation_angle, confidence = detect_angle_by_lines(processed_with_text_fill, verbose=args.verbose)
+    if rotation_angle != 0:
+        if args.verbose:
+            print(f"旋轉角度: {rotation_angle}°，置信度: {confidence:.2f}")
+        rotated_image = rotate_image(processed, rotation_angle)
+    else:
+        rotated_image = processed
+     
     # 儲存結果
-    cv2.imwrite(args.output, processed_with_text_fill)
+    cv2.imwrite(args.output, rotated_image)
     
     if args.verbose:
         print(f"\n處理完成！")
