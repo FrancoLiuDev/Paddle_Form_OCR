@@ -305,8 +305,8 @@ def main():
     parser.add_argument('--output-dir', '-o', default='result_test', help='輸出目錄（預設：result_test）')
     parser.add_argument('--test', '-t', choices=[
         'line_detection', 'text_filled', 'angle_detection', 
-        'angle_correction', 'line_visualization', 'complete'
-    ], default='complete', help='要執行的測試類型（預設：complete）')
+        'angle_correction', 'line_visualization'
+    ], required=True, help='要執行的測試類型（必須指定）')
     parser.add_argument('--angle', type=float, help='指定角度修正值（用於 angle_correction 測試）')
     parser.add_argument('--degree-limit', type=float, help='線條可視化的角度限制（用於 line_visualization 測試）')
     parser.add_argument('--verbose', '-v', action='store_true', help='顯示詳細輸出')
@@ -333,8 +333,6 @@ def main():
             tester.test_angle_correction(args.input, args.angle, args.verbose)
         elif args.test == 'line_visualization':
             tester.test_line_visualization(args.input, args.degree_limit, args.verbose)
-        elif args.test == 'complete':
-            tester.test_complete_pipeline(args.input, args.verbose)
         
         print(f"\n測試完成！結果已儲存至 {args.output_dir}/")
         return 0
