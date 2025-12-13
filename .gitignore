@@ -70,3 +70,8 @@ training_data/
 # Coverage
 .coverage
 htmlcov/
+
+# 11_PDF_Pipeline - 管道輸出目錄
+11_PDF_Pipeline/meta/
+11_PDF_Pipeline/logs/
+11_PDF_Pipeline/output/
