@@ -12,6 +12,8 @@ from pathlib import Path
 from datetime import datetime
 import shutil
 import subprocess
+import random
+import cv2
 
 # 加入 tools 模組路徑（必須在最前面，避免與 PaddleOCR 的 tools 衝突）
 _SCRIPT_DIR = Path(__file__).parent
@@ -131,6 +133,32 @@ class Step1_PDFToImages:
                 raise RuntimeError(f"PDF 轉換失敗: {message}")
             
             self.logger.info(message)
+            # 如果配置啟用，對每張轉出的圖片施加隨機旋轉（預設啟用）
+            try:
+                rotate_after = params.get('random_rotate_after_split', True)
+                max_deg = float(params.get('random_rotate_max_deg', 11.0))
+            except Exception:
+                rotate_after = True
+                max_deg = 11.0
+
+            if rotate_after:
+                self.logger.info(f"對每張輸出圖片應用隨機旋轉 ±{max_deg}°")
+                for f in output_files:
+                    try:
+                        img = cv2.imread(str(f))
+                        if img is None:
+                            self.logger.warning(f"讀取圖片失敗，略過: {f}")
+                            continue
+                        h, w = img.shape[:2]
+                        angle = random.uniform(-max_deg, max_deg)
+                        M = cv2.getRotationMatrix2D((w/2, h/2), angle, 1.0)
+                        rotated = cv2.warpAffine(
+                            img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255)
+                        )
+                        cv2.imwrite(str(f), rotated)
+                        self.logger.info(f"  {f.name} -> rotated {angle:.2f}°")
+                    except Exception as e:
+                        self.logger.warning(f"旋轉圖片失敗: {f} - {e}")
             
             # 統計輸出
             total_size = sum(f.stat().st_size for f in output_files)

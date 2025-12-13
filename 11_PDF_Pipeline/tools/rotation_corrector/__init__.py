@@ -52,9 +52,7 @@ class RotationCorrector:
             sys.executable,
             str(self.script_path),
             "--input", str(image_path),
-            "--output", str(output_path),
-            "--degree", str(self.degree),
-            "--show-lines"  # 必須啟用以輸出角度資訊
+            "--output", str(output_path)
         ]
         
         if verbose:
@@ -76,10 +74,17 @@ class RotationCorrector:
             # 從輸出中提取角度資訊
             angle = None
             for line in result.stdout.split('\n'):
-                if '最終輸出角度' in line or '最多出現的角度' in line:
+                if '最終輸出角度' in line or '最多出現的角度' in line or 'rotation_angle:' in line:
                     # 提取角度數值
                     import re
-                    match = re.search(r'([-+]?\d+\.?\d*)°', line)
+                    match = re.search(r'([-+]?\d+\.?\d*)°?', line)
+                    if match:
+                        angle = float(match.group(1))
+                        break
+                # 也檢查 rotation_angle: 格式
+                elif 'rotation_angle:' in line:
+                    import re
+                    match = re.search(r'rotation_angle:\s*([-+]?\d+\.?\d*)', line)
                     if match:
                         angle = float(match.group(1))
                         break
