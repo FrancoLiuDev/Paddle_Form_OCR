@@ -454,9 +454,9 @@ class Step3_OCRRecognition:
             # 記錄每個檔案的結果
             for result in results:
                 if result['success']:
-                    self.logger.info(f"  ✓ {result['file']} → {result['output']} ({result['blocks']} 個文字塊)")
+                    self.logger.info(f"  ✓ {result['image']} → {result['output']} ({result['blocks']} 個文字塊)")
                 else:
-                    self.logger.warning(f"  ✗ {result['file']}: {result['message']}")
+                    self.logger.warning(f"  ✗ {result['image']}: {result.get('error', '未知錯誤')}")
             
             # 計算統計
             end_time = datetime.now()
@@ -611,8 +611,15 @@ class Pipeline:
 
 def main():
     """主程式"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='PDF Processing Pipeline')
+    parser.add_argument('--config', type=str, default='pipeline_config.json',
+                      help='配置檔路徑 (預設: pipeline_config.json)')
+    args = parser.parse_args()
+    
     try:
-        pipeline = Pipeline()
+        pipeline = Pipeline(config_file=args.config)
         results = pipeline.run()
         
         # 檢查是否全部成功

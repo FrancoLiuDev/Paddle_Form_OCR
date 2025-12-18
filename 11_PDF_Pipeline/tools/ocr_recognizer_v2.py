@@ -35,7 +35,7 @@ class OCRRecognizerV2:
         if verbose:
             print(f"正在初始化 PaddleOCR（語言: {lang}, GPU: {use_gpu}）...")
         
-        # 新版 PaddleOCR 3.x API 參數
+        # 新版 PaddleOCR 3.x API 參數（僅使用支援的參數）
         ocr_params = {
             'lang': lang,
             'use_textline_orientation': True,  # 文字方向檢測

@@ -1,0 +1,97 @@
+{
+  "pipeline_name": "PDF Processing Pipeline (Fast)",
+  "version": "1.0.0-fast",
+  "description": "步驟化處理 PDF 文件 - 速度優化版本",
+  "steps": [
+    {
+      "step_id": "step1",
+      "name": "PDF 轉圖片",
+      "enabled": true,
+      "input": {
+        "source": "input/",
+        "type": "pdf",
+        "validation": "single_file"
+      },
+      "processing": {
+        "tool": "pdf_converter",
+        "parameters": {
+          "dpi": 200,
+          "format": "png",
+          "color": "rgb",
+          "comment": "降低 DPI 從 300→200，速度提升約 40%"
+        }
+      },
+      "output": {
+        "destination": "meta/images/",
+        "type": "images",
+        "format": "png",
+        "naming": "page_{num:03d}.png"
+      },
+      "log": {
+        "file": "logs/step1.log",
+        "level": "INFO"
+      }
+    },
+    {
+      "step_id": "step2",
+      "name": "圖片角度校正",
+      "enabled": true,
+      "input": {
+        "source": "meta/images/",
+        "type": "images",
+        "validation": "has_files"
+      },
+      "processing": {
+        "tool": "rotation_corrector",
+        "parameters": {
+          "use_deskew": true,
+          "degree": 30,
+          "skip_threshold": 0.0,
+          "sigma": 3.0,
+          "num_peaks": 20,
+          "inplace": false
+        }
+      },
+      "output": {
+        "destination": "meta/images_rotated/",
+        "type": "images",
+        "format": "png"
+      },
+      "log": {
+        "file": "logs/step2.log",
+        "level": "INFO"
+      }
+    },
+    {
+      "step_id": "step3",
+      "name": "OCR 文字識別（速度優化）",
+      "enabled": true,
+      "input": {
+        "source": "meta/images_rotated/",
+        "type": "images",
+        "validation": "has_files"
+      },
+      "processing": {
+        "tool": "ocr_recognizer",
+        "parameters": {
+          "lang": "ch",
+          "use_gpu": false,
+          "high_sensitivity": false,
+          "convert_fullwidth": true,
+          "fast_mode": true,
+          "comment": "速度優化: 關閉文檔方向分類和展平，降低檢測分辨率"
+        }
+      },
+      "output": {
+        "destination": "meta/ocr/",
+        "type": "json",
+        "format": "json",
+        "naming": "page_{num:03d}.json"
+      },
+      "log": {
+        "file": "logs/step3.log",
+        "level": "INFO"
+      }
+    }
+  ]
+}
