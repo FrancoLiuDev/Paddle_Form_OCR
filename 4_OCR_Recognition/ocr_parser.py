@@ -137,8 +137,12 @@ class OCRParser:
         if self.verbose:
             print(f"\n正在識別: {image_path}")
         
-        # OCR 識別
-        result = self.ocr.ocr(image_path, cls=True)
+        # OCR 識別（新版 PaddleOCR 使用 predict）
+        try:
+            result = self.ocr.predict(image_path)
+        except AttributeError:
+            # 舊版 API 兼容
+            result = self.ocr.ocr(image_path)
         
         if not result or not result[0]:
             return {
@@ -150,29 +154,41 @@ class OCRParser:
         # 解析結果
         text_blocks = []
         for line in result[0]:
-            bbox = line[0]  # 座標
-            text_info = line[1]  # (文字, 置信度)
-            
-            # 取得原始文字
-            original_text = text_info[0]
-            
-            # 如果啟用全形轉半形，進行轉換
-            if self.convert_fullwidth:
-                converted_text = self.fullwidth_to_halfwidth(original_text)
-            else:
-                converted_text = original_text
-            
-            text_block = {
-                "text": converted_text,
-                "confidence": float(text_info[1]),
-                "bbox": bbox
-            }
-            
-            # 如果有進行轉換，記錄原始文字
-            if self.convert_fullwidth and original_text != converted_text:
-                text_block["original_text"] = original_text
-            
-            text_blocks.append(text_block)
+            # 新版 API 返回格式可能不同，需要兼容處理
+            try:
+                if isinstance(line, dict):
+                    # 新版 API 格式: {"bbox": [...], "text": "...", "score": 0.xx}
+                    bbox = line.get("bbox", [])
+                    original_text = line.get("text", "")
+                    confidence = float(line.get("score", 0.0))
+                else:
+                    # 舊版 API 格式: [bbox, (text, confidence)]
+                    bbox = line[0]
+                    text_info = line[1]
+                    original_text = text_info[0] if isinstance(text_info, (list, tuple)) else str(text_info)
+                    confidence = float(text_info[1]) if isinstance(text_info, (list, tuple)) and len(text_info) > 1 else 0.0
+                
+                # 如果啟用全形轉半形，進行轉換
+                if self.convert_fullwidth:
+                    converted_text = self.fullwidth_to_halfwidth(original_text)
+                else:
+                    converted_text = original_text
+                
+                text_block = {
+                    "text": converted_text,
+                    "confidence": confidence,
+                    "bbox": bbox
+                }
+                
+                # 如果有進行轉換，記錄原始文字
+                if self.convert_fullwidth and original_text != converted_text:
+                    text_block["original_text"] = original_text
+                
+                text_blocks.append(text_block)
+            except Exception as e:
+                if self.verbose:
+                    print(f"  警告: 解析文字塊時出錯: {e}, line: {line}")
+                continue
         
         if self.verbose:
             print(f"✓ 檢測到 {len(text_blocks)} 個文字塊")

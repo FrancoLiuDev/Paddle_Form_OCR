@@ -23,7 +23,8 @@ sys.path.insert(0, str(_SCRIPT_DIR))
 # 從本地 tools 模組導入
 from tools.pdf_converter import PDFConverter
 from tools.rotation_corrector import RotationCorrector
-from tools.ocr_recognizer import OCRRecognizer
+from tools.rotation_corrector_deskew import RotationCorrectorDeskew
+from tools.ocr_recognizer_v2 import OCRRecognizer
 
 
 class PipelineLogger:
@@ -260,14 +261,28 @@ class Step2_RotationCorrection:
             self.logger.info(f"輸入目錄: {self.input_dir}")
             self.logger.info(f"圖片數量: {len(self.image_files)}")
             
-            # 使用 RotationCorrector 工具
+            # 使用基於 deskew 的 RotationCorrector 工具
             params = self.config['processing']['parameters']
-            corrector = RotationCorrector(
-                degree=params.get('degree', 30),
-                skip_threshold=params.get('skip_threshold', 5.0)
-            )
             
-            self.logger.info(f"使用角度範圍: ±{corrector.degree}°")
+            # 決定使用哪個校正器
+            use_deskew = params.get('use_deskew', True)  # 預設使用 deskew
+            
+            if use_deskew:
+                corrector = RotationCorrectorDeskew(
+                    skip_threshold=params.get('skip_threshold', 5.0),
+                    sigma=params.get('sigma', 3.0),
+                    num_peaks=params.get('num_peaks', 20)
+                )
+                self.logger.info(f"使用校正器: deskew (Hough Line Transform)")
+                self.logger.info(f"檢測參數: sigma={params.get('sigma', 3.0)}, num_peaks={params.get('num_peaks', 20)}")
+            else:
+                corrector = RotationCorrector(
+                    degree=params.get('degree', 30),
+                    skip_threshold=params.get('skip_threshold', 5.0)
+                )
+                self.logger.info(f"使用校正器: preprocess_hough")
+                self.logger.info(f"使用角度範圍: ±{corrector.degree}°")
+            
             self.logger.info(f"跳過閾值: ±{corrector.skip_threshold}°")
             self.logger.info(f"處理模式: {'覆蓋原圖' if params.get('inplace', False) else '另存新檔'}")
             

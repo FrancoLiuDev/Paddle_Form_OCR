@@ -64,7 +64,7 @@
     {
       "step_id": "step3",
       "name": "OCR 文字識別",
-      "enabled": true,
+      "enabled": false,
       "input": {
         "source": "meta/images_rotated/",
         "type": "images",
