@@ -398,6 +398,7 @@ class Step3_OCRRecognition:
         self.use_gpu = params.get('use_gpu', False)
         self.high_sensitivity = params.get('high_sensitivity', False)
         self.convert_fullwidth = params.get('convert_fullwidth', True)
+        self.start_page = params.get('start_page', 1)  # 從第幾頁開始處理
     
     def validate_input(self):
         """驗證輸入"""
@@ -435,6 +436,8 @@ class Step3_OCRRecognition:
             self.logger.info(f"輸出目錄: {self.output_dir}")
             self.logger.info(f"語言: {self.lang}, GPU: {self.use_gpu}")
             self.logger.info(f"高敏感度: {self.high_sensitivity}, 全形轉換: {self.convert_fullwidth}")
+            if self.start_page > 1:
+                self.logger.info(f"⚠️  從第 {self.start_page} 頁開始處理")
             
             # 建立 OCR 識別器
             recognizer = OCRRecognizer(
@@ -448,7 +451,8 @@ class Step3_OCRRecognition:
             # 批次處理
             success_count, total_count, results = recognizer.recognize_batch(
                 input_dir=self.input_dir,
-                output_dir=self.output_dir
+                output_dir=self.output_dir,
+                start_page=self.start_page
             )
             
             # 記錄每個檔案的結果

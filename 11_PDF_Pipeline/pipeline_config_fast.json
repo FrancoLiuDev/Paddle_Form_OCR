@@ -78,8 +78,9 @@
           "use_gpu": false,
           "high_sensitivity": false,
           "convert_fullwidth": true,
+          "start_page": 3,
           "fast_mode": true,
-          "comment": "速度優化: 關閉文檔方向分類和展平，降低檢測分辨率"
+          "comment": "速度優化: 從第3頁開始處理，關閉文檔方向分類和展平，降低檢測分辨率"
         }
       },
       "output": {

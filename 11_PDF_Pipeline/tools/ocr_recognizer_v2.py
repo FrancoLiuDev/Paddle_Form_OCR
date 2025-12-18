@@ -38,7 +38,7 @@ class OCRRecognizerV2:
         # 新版 PaddleOCR 3.x API 參數（僅使用支援的參數）
         ocr_params = {
             'lang': lang,
-            'use_textline_orientation': True,  # 文字方向檢測
+            'use_textline_orientation': False,  # 文字方向檢測（關閉以加速）
         }
         
         # 根據敏感度設置參數
@@ -174,7 +174,8 @@ class OCRRecognizerV2:
     def recognize_batch(self,
                        input_dir: Path,
                        output_dir: Path,
-                       pattern: str = "*.png") -> Tuple[int, int, List[Dict]]:
+                       pattern: str = "*.png",
+                       start_page: int = 1) -> Tuple[int, int, List[Dict]]:
         """
         批次識別
         
@@ -182,6 +183,7 @@ class OCRRecognizerV2:
             input_dir: 輸入目錄
             output_dir: 輸出目錄
             pattern: 檔案匹配模式
+            start_page: 開始處理的頁碼（從 1 開始，預設 1）
             
         Returns:
             (成功數量, 總數量, 結果列表)
@@ -190,15 +192,22 @@ class OCRRecognizerV2:
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # 取得所有圖片
-        image_files = sorted(input_dir.glob(pattern))
+        all_image_files = sorted(input_dir.glob(pattern))
         
-        if not image_files:
+        if not all_image_files:
             if self.verbose:
                 print(f"✗ 在 {input_dir} 找不到符合 {pattern} 的圖片")
             return 0, 0, []
         
-        if self.verbose:
-            print(f"找到 {len(image_files)} 張圖片")
+        # 根據 start_page 過濾圖片
+        if start_page > 1:
+            image_files = all_image_files[start_page - 1:]
+            if self.verbose:
+                print(f"找到 {len(all_image_files)} 張圖片，從第 {start_page} 頁開始處理（處理 {len(image_files)} 張）")
+        else:
+            image_files = all_image_files
+            if self.verbose:
+                print(f"找到 {len(image_files)} 張圖片")
         
         success_count = 0
         results = []
